@@ -675,27 +675,26 @@ context and direction provided by the authors.
 
 The following materials were provided as input context for drafting:
 
-1. **Object handling problem space analysis**
-   (`object_handling_problem_space.md`) -- A technology-agnostic analysis
-   of dynamic spatial ownership covering the three ownership modes, scale
-   challenges, workaround tradeoffs, DES prior art, and open questions
-   for the community. Developed over two sessions with internal review
-   and a clarity pass from Aaron Luk.
+1. **Object handling problem space analysis** -- A technology-agnostic
+   analysis of dynamic spatial ownership covering the three ownership
+   modes, scale challenges, workaround tradeoffs, DES prior art, and
+   open questions for the community. Developed over two sessions with
+   internal review and a clarity pass from Aaron Luk.
 
-2. **USD/Omniverse-specific instantiation**
-   (`object_handling_problem_space_usd_omniverse.md`) -- USD mechanisms
-   (hierarchy, point instancers, namespace editing, physics constraints),
-   Omniverse tooling (VFI Guide, Surface Gripper, Conveyor Extension,
-   Fabric, Warp), field observations, and an 8-step straw-man roadmap.
+2. **USD/Omniverse-specific instantiation** -- USD mechanisms
+   (hierarchy, point instancers, namespace editing, physics
+   constraints), Omniverse tooling (VFI Guide, Surface Gripper,
+   Conveyor Extension, Fabric, Warp), field observations, and an
+   8-step straw-man roadmap.
 
-3. **User stories** (`user_stories.md`) -- Three user stories (POC, EA,
-   GA) covering discovery through factory-scale deployment.
+3. **User stories** -- Three user stories (POC, EA, GA) covering
+   discovery through factory-scale deployment.
 
 4. **[Separation of Concerns for Identifiers](../identifier_separation_of_concerns/README.md)**
    and **[Units and Scale](../units_and_scale/README.md)** proposals --
    Used as structural and formatting references.
 
-5. **Aaron Luk's T5T methodology template** -- The recurring pattern of
+5. **Internal methodology template** -- The recurring pattern of
    reframing longstanding frustration as standardization + technology
    co-dependency, separating concerns, and driving community ownership.
 
