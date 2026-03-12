@@ -617,8 +617,10 @@ and bring concrete experience, not preferences.
 5. **How should unit-aware value resolution work?**
    A computational layer that resolves units during value evaluation
    (rather than requiring every consumer to re-implement conversion)
-   is the long-term infrastructure goal, likely requiring the
-   emerging OpenExec framework. The TAC needs to scope this: is it
+   is the long-term infrastructure goal. OpenExec (shipping with
+   OpenUSD since v25.08) provides the execution framework for this:
+   schema computations with automatic caching, invalidation, and
+   multi-threaded evaluation. The community needs to scope this: is it
    feasible, what does it cost, and what subset of the problem does
    it actually cover? Default behavior must remain numeric-preserving
    for backward compatibility; unit-aware resolution is opt-in only.
@@ -731,12 +733,23 @@ ecosystem:
   (attributes that scale non-linearly with the unit ratio) applies
   directly to lighting.
 
-- **[OpenExec](../openexec/README.md)** -- The emerging computation
-  framework for USD. Unit-aware value resolution -- converting
-  authored values to canonical units at evaluation time -- is a
-  natural candidate for the OpenExec execution model, where
-  conversion would be expressed as a computation node rather than
-  requiring each consumer to re-implement conversion.
+- **[OpenExec](../openexec/README.md)** -- OpenExec's computation
+  framework (shipping with OpenUSD since v25.08) is a natural fit for
+  unit-aware value resolution. A schema computation registered on
+  unit-bearing attributes could use OpenExec's `NamespaceAncestor`
+  input accessor to walk up the hierarchy, find the nearest prim-level
+  MetricsAPI declaration (the effective `metersPerUnit` context),
+  compute the conversion factor, and return the value in canonical
+  stage units -- the same pattern that `computeLocalToWorldTransform`
+  uses to accumulate transforms through the hierarchy. Computed values
+  would be automatically cached and invalidated when either the
+  authored value or the metrics context changes. Key dependency:
+  prim-level MetricsAPI
+  ([PR #45](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/45))
+  must exist first to provide the per-prim unit context that the
+  computation would consume. Limitation: tools that do not use
+  OpenExec would not see converted values -- this is opt-in, not
+  universal, and default behavior remains numeric-preserving.
 
 ## Next steps
 
@@ -853,26 +866,23 @@ process based on context and direction provided by the authors.
 
 The following materials were provided as input context for drafting:
 
-1. **Units problem space analysis**
-   ([`units_problem_space.md`](https://github.com/PixarAnimationStudios/OpenUSD-proposals)) --
-   A technology-agnostic analysis of the units problem covering
-   serialized/working/display units, precision concerns, conversion
-   architecture, derived quantities, and aggregation across scales.
-   Developed over four multi-prompt sessions with extensive internal
-   review.
+1. **Units problem space analysis** -- A technology-agnostic analysis
+   of the units problem covering serialized/working/display units,
+   precision concerns, conversion architecture, derived quantities,
+   and aggregation across scales. Developed over four multi-prompt
+   sessions with extensive internal review.
 
-2. **USD/Omniverse-specific instantiation**
-   (`units_problem_space_usd_omniverse.md`) -- Omniverse-specific
+2. **USD/Omniverse-specific instantiation** -- Omniverse-specific
    tooling (Metrics Assembler, Scene Optimizer), field observations,
    and an 8-step roadmap covering standards, headless resolve,
    attribute audit, extended rules, robust baking, composed-space
    editing, prim-level metrics schemas, and unit-aware value
    resolution.
 
-3. **User stories** (`user_stories.md`) -- Seven user stories
-   covering the full units roadmap from spec/validation through
-   SDK modules (resolve, bake, lens) to OpenUSD ecosystem
-   contributions (MetricsAPI schemas, unit-aware value resolution).
+3. **User stories** -- Seven user stories covering the full units
+   roadmap from spec/validation through SDK modules (resolve, bake,
+   lens) to OpenUSD ecosystem contributions (MetricsAPI schemas,
+   unit-aware value resolution).
 
 4. **[Separation of Concerns for Identifiers](../identifier_separation_of_concerns/README.md)**
    proposal -- Used as the primary structural and formatting
