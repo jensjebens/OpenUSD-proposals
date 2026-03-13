@@ -856,60 +856,110 @@ finite set that "completes" the conversion.
 ## Appendix B: AI-Assisted Drafting
 
 This proposal was drafted with the assistance of an AI language model
-(Claude, Anthropic) operating within Cursor IDE, under the direction
-of Aaron Luk and Jens Jebens. All conceptual framing, editorial
-decisions, and technical judgment are the responsibility of the human
-authors. The AI was used as a drafting tool to accelerate the writing
-process based on context and direction provided by the authors.
+(Claude, Anthropic) operating within Cursor IDE, under the direction of
+Aaron Luk and Jens Jebens. All conceptual framing, editorial decisions,
+and technical judgment are the responsibility of the human authors. The
+AI was used as a drafting tool to accelerate the writing process based on
+context and direction provided by the authors.
+
+The context provided to the AI was itself the product of extensive
+preceding work: stakeholder conversations, meeting transcripts, internal
+Slack discussions, field observations from virtual factory deployments,
+and review of the OpenUSD codebase, validation framework, and AOUSD
+forum discussions. The AI did not participate in those
+conversations; it received their outputs as input for drafting.
 
 ### Context provided to the AI
 
-The following materials were provided as input context for drafting:
+The following materials were gathered by the authors and provided as
+input context. Each item represents human-directed research or
+stakeholder engagement that preceded the drafting process:
 
-1. **Units problem space analysis** -- A technology-agnostic analysis
-   of the units problem covering serialized/working/display units,
-   precision concerns, conversion architecture, derived quantities,
-   and aggregation across scales. Developed over four multi-prompt
-   sessions with extensive internal review.
+1. **Stakeholder conversations and meeting transcripts** -- Sync
+   meetings with domain experts covering factory-scale unit handling
+   pain points, Metrics Assembler architecture, Kit default issues, and
+   customer deployment experiences. Transcripts were reviewed and key
+   findings extracted before being provided as context.
 
-2. **USD/Omniverse-specific instantiation** -- Omniverse-specific
-   tooling (Metrics Assembler, Scene Optimizer), field observations,
-   and an 8-step roadmap covering standards, headless resolve,
-   attribute audit, extended rules, robust baking, composed-space
-   editing, prim-level metrics schemas, and unit-aware value
-   resolution.
+2. **Internal Slack threads and field observations** -- Practitioner
+   reports on Metrics Assembler performance at scale, camera/light
+   scaling semantics, and CAD converter limitations. Field observations
+   from virtual factory deployments documenting where unit mismatches
+   cause failures and what workarounds teams adopt.
 
-3. **User stories** -- Seven user stories covering the full units
-   roadmap from spec/validation through SDK modules (resolve, bake,
-   lens) to OpenUSD ecosystem contributions (MetricsAPI schemas,
-   unit-aware value resolution).
+3. **Technology-agnostic problem space analysis** -- A separate document
+   analyzing the units problem across any aggregation system, covering
+   serialized/working/display units, precision concerns, conversion
+   architecture, derived quantities, and aggregation across scales.
+   Developed over four multi-prompt sessions with human review and
+   correction at each step.
 
-4. **[Separation of Concerns for Identifiers](../identifier_separation_of_concerns/README.md)**
-   proposal -- Used as the primary structural and formatting
-   reference for this proposal. The identifiers proposal demonstrates
-   the OpenUSD-proposals convention for problem-framing proposals:
-   motivation, problem statement, key questions, existing mechanisms,
-   industry use cases, design considerations with principles and open
-   questions, relationship to other proposals, and next steps.
+4. **USD/Omniverse-specific analysis** -- A companion document covering
+   Metrics Assembler and Scene Optimizer architecture, field
+   observations, and an 8-step roadmap. Developed in parallel with the
+   general analysis.
 
-5. **[Revise Use of Layer Metadata](../revise_use_of_layer_metadata/README.md)**
+5. **User stories** -- Seven user stories covering the full units
+   roadmap from spec/validation through SDK modules to OpenUSD ecosystem
+   contributions. These defined the scope and acceptance criteria that
+   the proposal addresses.
+
+6. **OpenUSD codebase and validation framework** -- Direct review of the
+   OpenUSD validation framework (`usdGeomValidators:StageMetadataChecker`)
+   and the Omniverse Asset Validator (UN.001--UN.007) to understand what
+   unit validation exists today and where the gaps are.
+
+7. **OpenExec documentation and API reference** -- Research into
+   OpenExec's computation framework (shipping with OpenUSD v25.08),
+   including the `NamespaceAncestor` input accessor and its relevance to
+   unit-aware value resolution.
+
+8. **Existing proposals in this repository** -- The
+   [Separation of Concerns for Identifiers](../identifier_separation_of_concerns/README.md)
+   proposal was used as the primary structural reference.
+   [Revise Use of Layer Metadata](../revise_use_of_layer_metadata/README.md)
    ([PR #45](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/45))
-   -- The Pixar proposal for migrating stage metadata to applied
-   schemas, used as both a formatting reference and a key technical
-   input on the MetricsAPI direction.
+   was used as a key technical input on the MetricsAPI direction.
 
-6. **Existing proposals in this repository** -- The AI reviewed the
-   structure and conventions of published proposals (e.g.,
-   `physical-lighting`, `openexec`, `revise_use_of_layer_metadata`)
-   and the proposals `Readme.md` to inform formatting and structural
-   decisions.
-
-7. **Field observations and performance data** -- Internal
-   observations from virtual factory deployments including metrics
-   resolution performance measurements, Kit/Composer default unit
-   issues, and CAD converter limitations.
-
-8. **AOUSD forum discussion** --
+9. **AOUSD forum discussion** --
    [Forum thread](https://forum.aousd.org/t/proposal-to-revise-use-of-layer-metadata-in-usd/1422)
-   on the MetricsAPI proposal, including performance concerns raised
-   by practitioners.
+   on the MetricsAPI proposal, including performance concerns raised by
+   practitioners.
+
+### Review and refinement
+
+The draft was refined through multiple rounds of review. Key editorial
+decisions included:
+
+- Merging the separate "Key Questions" and "Solution Approaches" sections
+  into a unified "Open questions and tradeoffs" section to eliminate
+  repetition -- the same options were being presented twice from slightly
+  different angles.
+- Removing the duplicate `SdfLayerOffset` / time-vs-space discussion that
+  appeared in both Motivation and Existing Mechanisms, keeping the
+  detailed treatment in Existing Mechanisms with a cross-reference.
+- Trimming the "No one has agreed on canonical units" subsection from 18
+  lines to 8, removing rhetorical questions that were repeated in the
+  open questions section.
+- Expanding the OpenExec reference from a 4-line placeholder to a
+  substantive analysis of how `NamespaceAncestor` accessor maps to
+  unit-aware value resolution, including the MetricsAPI dependency and
+  opt-in limitation.
+- Adding cross-layer unit consistency validation as a gap -- neither the
+  OpenUSD validation framework nor the Omniverse Asset Validator checks
+  whether `metersPerUnit` is consistent across layers in a composed
+  stage.
+- Incorporating Metrics Assembler architecture details (two-part system:
+  core library + Kit UI) and schema-driven physics rules from developer
+  input, and updating the Scene Optimizer description with the
+  scale-vs-vertex tradeoff.
+- Broadening the Existing Mechanisms section to reference non-Omniverse
+  approaches (Unreal, Unity, Houdini, glTF) so the section reads as
+  field evidence rather than vendor advocacy.
+- Adding a risk on implementation-agnostic specification language for
+  Working Group submissions, based on experience with the AOUSD spec
+  style guide.
+- Removing partner and customer names from the document.
+
+A prompt-level drafting log for the problem space documents has been
+archived separately.
