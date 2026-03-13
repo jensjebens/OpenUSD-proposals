@@ -169,26 +169,27 @@ sacrifice something that a proper solution would preserve:
 Each workaround is a response to the same gap: scene graphs express
 *what is related to what* but not *when those relationships change.*
 
-Hierarchy is one way to express spatial relationships, but not the only
-one -- and not always sufficient. Discrete event simulators decouple
-logical ownership from spatial hierarchy because objects change carriers
-continuously (see [Prior art](#prior-art)). Entity-relationship standards
-like IFC express containment, aggregation, and connection through
-explicit relationship objects because buildings require richer spatial
-semantics than parent-child hierarchy can capture. In both cases, the
-industries built their data models around relationships that hierarchy
-alone cannot represent. As USD finds adoption in these industries, the
-content arriving at USD's door carries an implicit requirement for
-relationship types that USD's hierarchy does not currently express.
+Dynamic ownership has been solved at industrial scale for decades --
+discrete event simulators decouple logical ownership from spatial
+hierarchy, and entity-relationship standards like IFC express
+containment through explicit relationship objects rather than hierarchy
+(see [Prior art](#prior-art)). The question is not *whether* dynamic
+ownership can work, but how to express it within a declarative scene
+description. As USD finds adoption in these industries, the content
+arriving at USD's door carries an implicit requirement for relationship
+types that USD's hierarchy does not currently express.
 
-However, any mechanism for USD must reckon with the properties that
-hierarchy provides: stable namespace paths enable identification,
-addressability, composition, and non-destructive overrides. These are
-load-bearing guarantees. The challenge is to determine whether dynamic
-ownership can be expressed without disturbing these invariants, and what
-the real costs and benefits are. That determination requires both
-cross-industry input on where the problem is most acute and prototype
-evidence on what works at scale.
+Any mechanism for USD must reckon with the properties that hierarchy
+provides:
+
+- Stable namespace paths enable identification and addressability.
+- Composition depends on static hierarchy for deterministic evaluation.
+- Non-destructive overrides rely on path stability across layers.
+
+These are load-bearing guarantees. The challenge is to determine whether
+dynamic ownership can be expressed without disturbing these invariants.
+That determination requires both cross-industry input on where the
+problem is most acute and prototype evidence on what works at scale.
 
 ### Why this matters now
 
@@ -434,16 +435,12 @@ and design principles before committing to a specific mechanism.
 ### Open questions and tradeoffs
 
 1. **Which industries are affected, and how important is this to each?**
-   Dynamic ownership is the dominant mode of operation in factory and
-   logistics simulation, but it also appears in film (character-prop
-   interaction), games (destruction, crowds, inventory), robotics
-   (grasp-release), and construction (material logistics). The community
-   needs to assess relative importance across these domains. If the
-   problem is critical to multiple AOUSD constituencies, it warrants
-   ecosystem-level investment. If it is primarily an industrial
-   simulation concern, the solution space is different. The IEDT and AECO
-   Interest Groups, the Physics Working Group, and M&E practitioners each
-   bring distinct requirements.
+   Dynamic ownership appears in manufacturing, film, games, robotics,
+   and construction -- each with different scale requirements and
+   tolerance for runtime-only solutions. If the problem is critical to
+   multiple AOUSD constituencies, it warrants ecosystem-level investment.
+   The IEDT and AECO Interest Groups, the Physics Working Group, and
+   M&E practitioners each bring distinct requirements.
 
 2. **What do the arriving industries' data models tell us?** DES systems
    decouple logical ownership from spatial hierarchy. IFC expresses
@@ -730,40 +727,21 @@ stakeholder engagement that preceded the drafting process:
 The draft was refined through multiple rounds of review. Key editorial
 decisions included:
 
-- Compressing the introduction from the problem space document's
-  55-line version to 3 paragraphs, relocating the factory walkthrough
-  into "Why Scene Graphs Cannot Express Dynamic Ownership" as concrete
-  motivation.
-- Adding the co-dependency framing: the ecosystem must determine whether
-  dynamic ownership should be expressed in the scene description or the
-  runtime, but cannot make that decision without prototype evidence.
-  Iteratively refined from a prescriptive "the ecosystem must decide"
-  to an exploratory framing grounded in the observation that the
-  industries adopting USD already built their data models around
-  dynamic relationships.
-- Adding IFC entity-relationship models as prior art alongside DES,
-  after identifying that IFC's explicit relationship objects
-  (containment, aggregation, connection) offer a complementary
-  architectural insight to DES's mutable-pointer pattern.
-- Expanding the OpenExec reference from a 4-line placeholder to a
-  substantive analysis, including the `Relationship()` accessor as a
-  DES mutable-pointer analogue, and adding computation-driven
-  attachment as a seventh architectural approach in the tradeoff
-  analysis.
-- Correcting the claim that point instancers "cannot participate in
-  physics" -- PhysX supports collision on point instancer prototypes.
-  Replaced with accurate framing: PIs support particle-style rigid body
-  simulation but not per-instance joints, contact queries, or
-  constraint-based attachment. Added this as an open question: whether
-  PI-level physics is sufficient for certain dynamic ownership use
-  cases is itself worth examining.
-- Reframing the Film and game production bullet to acknowledge that
-  DCC constraint rigs baked into USD are a working workflow at shot
-  scale, rather than implying M&E doesn't have a solution.
-- Updating the Isaac Sim Surface Gripper description from "fixed joints,
-  CPU-only" to "D6 joints with configurable force limits" per current
-  documentation.
-- Removing partner and customer names from the document.
+- Compressed introduction to 3 paragraphs; relocated factory walkthrough
+  into "Why Scene Graphs Cannot Express Dynamic Ownership."
+- Iteratively refined co-dependency framing from prescriptive ("the
+  ecosystem must decide") to exploratory (industries already built their
+  data models around dynamic relationships).
+- Added IFC entity-relationship models as prior art alongside DES.
+- Expanded OpenExec from placeholder to substantive analysis
+  (`Relationship()` accessor as DES mutable-pointer analogue,
+  computation-driven attachment as seventh approach).
+- Corrected point instancer physics claims (PIs support particle-style
+  rigid body simulation, not per-instance joints or contact queries).
+- Reframed M&E bullet to acknowledge DCC constraint baking as a working
+  workflow at shot scale.
+- Updated Surface Gripper description to D6 joints per current docs.
+- Removed partner and customer names.
 
 A prompt-level drafting log for the problem space documents has been
 archived separately.
