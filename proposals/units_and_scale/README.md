@@ -62,20 +62,21 @@ and system infrastructure
 that makes the agreed-upon architecture implementable.
 Neither can proceed without the other.
 
-**Expected outcome.** This proposal seeks community alignment
-on the structure of the units problem --
-distinguishing concerns that are routinely conflated --
-and on the design principles that should guide solutions.
-The likely result is a combination of ecosystem conventions
-(canonical units, conformance responsibilities),
-infrastructure changes (unit-dimension annotations in schemas,
-prim-level metrics, evaluation-time resolution),
-and practical tooling (assembly-time correction,
-ingest validation, composed-space editing).
-Several of these efforts are already underway;
-this proposal aims to connect them
-under a coherent problem statement
-so they can proceed without one blocking or distorting the other.
+**Expected outcome.** This proposal seeks community alignment on the
+structure of the units problem -- distinguishing concerns that are
+routinely conflated -- and on the design principles that should guide
+solutions. The likely result is a combination of:
+
+- **Ecosystem conventions** -- canonical units, conformance
+  responsibilities.
+- **Infrastructure changes** -- unit-dimension annotations in schemas,
+  prim-level metrics, evaluation-time resolution.
+- **Practical tooling** -- assembly-time correction, ingest validation,
+  composed-space editing.
+
+Several of these efforts are already underway; this proposal aims to
+connect them under a coherent problem statement so they can proceed
+without one blocking or distorting the other.
 
 ## Motivation
 
@@ -221,14 +222,18 @@ is not in the data.
 
 **Composition has no unit boundaries.**
 Aggregation systems that preserve authored numbers exactly -- rather
-than normalizing on import -- typically lack the structural
-prerequisites for reliable unit reconciliation: schemas do not declare
-which attributes are unit-bearing or what their unit dimensions are;
-composition has no concept of a unit boundary at reference or
-aggregation points; and there is no computational layer where "read
-this value in canonical units" can be expressed as part of value
-evaluation. These are addressable gaps, but they require coordinated
-design work across schema, composition, and evaluation layers.
+than normalizing on import -- typically lack three structural
+prerequisites for reliable unit reconciliation:
+
+- Schemas do not declare which attributes are unit-bearing or what
+  their unit dimensions are.
+- Composition has no concept of a unit boundary at reference or
+  aggregation points.
+- There is no computational layer where "read this value in canonical
+  units" can be expressed as part of value evaluation.
+
+These are addressable gaps, but they require coordinated design work
+across schema, composition, and evaluation layers.
 
 These three gaps reinforce each other. Software cannot be designed
 correctly until the ecosystem agrees on what it should do. The
@@ -532,27 +537,23 @@ If you want to help, pick the one closest to your expertise
 and bring concrete experience, not preferences.
 
 1. **What are the canonical unit conventions?**
-   This decision requires no changes to OpenUSD. The IEDT and AECO
-   Interest Groups represent the constituencies most affected. Until
-   the ecosystem converges on defaults -- or at minimum on what must
-   be declared and what can be assumed -- every pipeline reinvents
-   its own conventions. Candidates include SI base units (meters,
-   kilograms, seconds -- natural for physics-based workflows),
-   domain-specific conventions (millimeters for mechanical CAD,
-   centimeters for game engines, feet for U.S. architectural
-   practice), or a "declared but not prescribed" model where every
-   asset must declare its units but no single system is canonical.
-   If you have pipeline evidence for what works and what breaks,
-   these IGs need it now. Convention agreement unblocks every
-   subsequent infrastructure decision.
+   This decision requires no changes to OpenUSD. Candidates include:
+
+   - **SI base units** (meters, kilograms, seconds) -- natural for
+     physics-based workflows and cross-industry interchange.
+   - **Domain-specific conventions** -- millimeters for mechanical CAD,
+     centimeters for game engines, feet for U.S. architectural practice.
+   - **Declared but not prescribed** -- every asset must declare its
+     units, but no single system is canonical.
+
+   The IEDT and AECO Interest Groups represent the constituencies most
+   affected. Convention agreement unblocks every subsequent
+   infrastructure decision.
 
 2. **Where should conversion happen, and who is responsible?**
-   A corrective scale factor must be applied somewhere when assets
-   with different `metersPerUnit` are composed into the same stage.
-   Where in the stack that conversion occurs, and who bears the
-   responsibility, are two facets of the same question. Six
-   approaches span the spectrum; production systems typically combine
-   several:
+   Where in the stack unit conversion occurs, and who bears the
+   responsibility, are two facets of the same question. Six approaches
+   span the spectrum:
 
    - **Standardize at the source.** Define canonical units and require
      conformance before content enters the system. Highest leverage --
@@ -759,10 +760,11 @@ ecosystem:
    is welcome there.
 
 2. **Align on canonical conventions.** The most impactful near-term
-   action requires no software changes. Engage the IEDT and AECO
-   Interest Groups to drive convergence on canonical unit conventions.
-   Convention agreement unblocks every subsequent infrastructure
-   decision.
+   action requires no software changes. The IEDT Interest Group's
+   charter explicitly includes "units and parameters requirements"
+   with routing to the Core Specification Working Group -- this is an
+   existing chartered mechanism for exactly this work. Convention
+   agreement unblocks every subsequent infrastructure decision.
 
 3. **Drive the MetricsAPI proposal forward.** The Pixar proposal
    ([PR #45](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/45))
@@ -931,35 +933,20 @@ stakeholder engagement that preceded the drafting process:
 The draft was refined through multiple rounds of review. Key editorial
 decisions included:
 
-- Merging the separate "Key Questions" and "Solution Approaches" sections
-  into a unified "Open questions and tradeoffs" section to eliminate
-  repetition -- the same options were being presented twice from slightly
-  different angles.
-- Removing the duplicate `SdfLayerOffset` / time-vs-space discussion that
-  appeared in both Motivation and Existing Mechanisms, keeping the
-  detailed treatment in Existing Mechanisms with a cross-reference.
-- Trimming the "No one has agreed on canonical units" subsection from 18
-  lines to 8, removing rhetorical questions that were repeated in the
-  open questions section.
-- Expanding the OpenExec reference from a 4-line placeholder to a
-  substantive analysis of how `NamespaceAncestor` accessor maps to
-  unit-aware value resolution, including the MetricsAPI dependency and
-  opt-in limitation.
-- Adding cross-layer unit consistency validation as a gap -- neither the
-  OpenUSD validation framework nor the Omniverse Asset Validator checks
-  whether `metersPerUnit` is consistent across layers in a composed
-  stage.
-- Incorporating Metrics Assembler architecture details (two-part system:
-  core library + Kit UI) and schema-driven physics rules from developer
-  input, and updating the Scene Optimizer description with the
-  scale-vs-vertex tradeoff.
-- Broadening the Existing Mechanisms section to reference non-Omniverse
-  approaches (Unreal, Unity, Houdini, glTF) so the section reads as
-  field evidence rather than vendor advocacy.
-- Adding a risk on implementation-agnostic specification language for
-  Working Group submissions, based on experience with the AOUSD spec
-  style guide.
-- Removing partner and customer names from the document.
+- Merged "Key Questions" and "Solution Approaches" into a unified
+  "Open questions and tradeoffs" section to eliminate repetition.
+- Removed duplicate `SdfLayerOffset` discussion between Motivation and
+  Existing Mechanisms.
+- Expanded OpenExec from placeholder to substantive analysis
+  (`NamespaceAncestor` accessor, MetricsAPI dependency, opt-in
+  limitation).
+- Added cross-layer unit consistency validation as a gap in both the
+  OpenUSD validation framework and the Omniverse Asset Validator.
+- Incorporated Metrics Assembler architecture details and schema-driven
+  physics rules from developer input.
+- Broadened Existing Mechanisms to reference non-Omniverse approaches
+  (Unreal, Unity, Houdini, glTF).
+- Removed partner and customer names.
 
 A prompt-level drafting log for the problem space documents has been
 archived separately.
