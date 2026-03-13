@@ -74,18 +74,17 @@ There is no USD mechanism to express: "this object is parented to the
 robot from frame 0--100 and to the AGV from frame 101 onward."
 Transforms can vary over time, but the set of spatial relationships --
 which prim is a child of which parent -- cannot. Changing that structure
-requires namespace editing (`UsdNamespaceEditor`, relocates), an
-authoring-layer operation that is neither animatable nor
-runtime-triggerable.
+requires namespace editing (`UsdNamespaceEditor`, relocates), an authoring-layer
+operation that is neither animatable nor runtime-triggerable.
 
 ### The expanding ecosystem
 
 USD was born in visual effects and animation, where parent-child
 relationships are typically fixed within a shot or sequence. A character
 rig has a stable joint hierarchy; a set has a stable spatial structure.
-Dynamic parenting exists (props attached to characters, vehicles carrying
-passengers) but is usually handled through DCC-specific constraint
-systems that do not serialize into USD.
+Dynamic parenting exists (props attached to characters, vehicles carrying passengers)
+but is usually handled through DCC-specific constraint systems that do not
+serialize into USD.
 
 As USD expands into new domains, it increasingly encounters workflows
 where dynamic spatial ownership is not an edge case but the dominant mode
@@ -107,11 +106,11 @@ of operation:
   published USD cannot recover which character held which prop at which
   time without re-deriving it from the baked transforms.
 
-In all these cases, the workarounds are the same: bake world-space
-transforms (losing hierarchy), pre-place copies and toggle visibility
-(prim explosion), or flatten into point instancers (losing identity).
-Each team invents its own combination. None express the dynamic
-relationships that the simulation actually computes.
+In all these cases, the workarounds are the same: bake world-space transforms
+(losing hierarchy), pre-place copies and toggle visibility (prim explosion), or
+flatten into point instancers (losing identity). Each team invents its own
+combination. None express the dynamic relationships that the simulation actually
+computes.
 
 ## Problem statement
 
@@ -132,8 +131,8 @@ many objects are moving as a rigid group on the same carrier.
 **Parenting.** An object's position is derived from the transform of
 another object -- its "parent." A gripper holding a part, a pallet
 carrying stacked boxes, a character's hand gripping a sword. Parenting is
-what hierarchy was designed for. The problem is that hierarchy is static:
-the parenting relationship cannot change over time.
+what hierarchy was designed for -- and where its static nature becomes a
+limitation.
 
 **Simulation.** An object's position is determined by a physics engine
 responding to forces, collisions, and constraints. A part falling off a
@@ -150,15 +149,9 @@ moment of handoff -- is where the hardest problems lie.
 
 ### Why scene graphs cannot express dynamic ownership
 
-Scene graphs were designed for objects whose spatial relationships are
-permanent. A robot's joints are always children of the robot's base. A
-building's floors are always children of the building. This is the right
-model for static assemblies.
-
-It is the wrong model for objects whose spatial relationships change over
-time. The workarounds practitioners adopt -- world-space baking,
-visibility toggling, over-flattening into vectorized representations --
-each sacrifice something that a proper solution would preserve:
+The workarounds practitioners adopt -- world-space baking, visibility
+toggling, over-flattening into vectorized representations -- each
+sacrifice something that a proper solution would preserve:
 
 - **World-space baking** preserves visual correctness but loses the
   semantic information that the object was "attached to the robot" vs.
@@ -188,59 +181,48 @@ alone cannot represent. As USD finds adoption in these industries, the
 content arriving at USD's door carries an implicit requirement for
 relationship types that USD's hierarchy does not currently express.
 
-However, any mechanism for USD must reckon with the properties that hierarchy
-provides: stable namespace paths enable identification, addressability,
-composition and non-destructive overrides. These are
+However, any mechanism for USD must reckon with the properties that
+hierarchy provides: stable namespace paths enable identification,
+addressability, composition, and non-destructive overrides. These are
 load-bearing guarantees. The challenge is to determine whether dynamic
-ownership can be expressed without disturbing these invariants and what the real costs
-and benefits are.
-That determination requires both cross-industry input on where the
-problem is most acute and prototype evidence on what works at scale.
+ownership can be expressed without disturbing these invariants, and what
+the real costs and benefits are. That determination requires both
+cross-industry input on where the problem is most acute and prototype
+evidence on what works at scale.
 
 ### Why this matters now
 
-1. **Factory-scale simulation is here.** Virtual factory workflows now
-   assemble thousands of CAD-sourced parts through hundreds of stations.
-   An automotive assembly plant with 300--500 stations holds 500 cars
-   simultaneously, each at a different stage of completion -- up to 30
-   million parts in the scene, many actively changing carriers. At 30 fps
-   with per-object transforms, raw data rates reach 57 GB/s. The
-   workarounds that work at 10 objects do not work at 30 million.
+1. **Factory-scale simulation is here.** The workarounds that work at 10
+   objects do not work at 30 million. At factory scale, baked transforms
+   produce data rates exceeding 57 GB/s, visibility toggling creates
+   combinatorial prim explosion, and point instancers sacrifice the
+   per-instance addressability that physics and clash detection require.
+   The [Manufacturing and logistics](#manufacturing-and-logistics) use
+   case below quantifies these costs.
 
-2. **Physics simulation requires addressability.** Robotics and
-   industrial simulation need individually addressable rigid bodies for
-   collision detection, contact forces, and joint constraints. Point
-   instancers -- the most scalable representation -- cannot participate
-   in physics. Every physics-enabled object must be a prim, which puts
-   it on the wrong side of the scale-vs-identity tradeoff.
+2. **DES-to-USD interchange is broken.** Discrete event simulation
+   systems have solved dynamic ownership internally for decades (see
+   [Prior art](#prior-art)). When they export to USD, the dynamic
+   relationships are lost -- ownership must be flattened into baked
+   transforms or point instancers. The USD stage does not contain the
+   ownership model.
 
-3. **DES-to-USD interchange is broken.** Discrete event simulation
-   systems (Plant Simulation, FlexSim, AnyLogic, Visual Components) have
-   solved dynamic ownership internally for decades. When they export to
-   USD via Omniverse Connectors, the dynamic relationships are lost:
-   ownership must be flattened into baked transforms or point instancers.
-   Live-sync sessions mask this, but the USD stage itself does not
-   contain the ownership model.
-
-4. **Cross-domain convergence.** The same structural problem appears in
-   film (character-prop interaction), games (inventory and equipment
-   systems), robotics (grasp-release cycles), and construction (material
-   logistics). Each domain has invented workarounds independently. A
-   standardized mechanism would serve all of them.
+3. **Cross-domain convergence.** The same structural problem appears
+   across industries (see [Industry use cases](#industry-use-cases)).
+   Each domain has invented workarounds independently. A standardized
+   mechanism would serve all of them.
 
 ## Existing mechanisms in USD
 
-Several existing mechanisms partially address aspects of dynamic
-ownership. Understanding their capabilities and limitations is essential
-for scoping the solution space.
+Several existing mechanisms partially address aspects of dynamic ownership.
+Understanding their capabilities and limitations is essential for scoping
+the solution space.
 
 ### Prim hierarchy and transform inheritance
 
-Prim hierarchy is USD's sole mechanism for spatial parenting. A child
-prim inherits its parent's transform and can have a local offset. The
-hierarchy is static across time -- an object's path is the same at every
-time code. This is the mechanism that needs to be either extended or
-complemented by a new one.
+Prim hierarchy is USD's sole mechanism for spatial parenting. A child prim
+inherits its parent's transform and can have a local offset. This is the
+mechanism that needs to be either extended or complemented by a new one.
 
 ### UsdGeomPointInstancer
 
@@ -251,17 +233,18 @@ scalable representation for large numbers of similar objects.
 
 Limitations for dynamic ownership: instances are not individually
 addressable through standard USD queries; they cannot carry per-instance
-relationships, overrides, or metadata; and they do not participate in
-physics simulation (PhysX requires individually addressable rigid body
-prims). Point instancers express *where* objects are but not *why* they
-are there or *what owns them.*
+relationships, overrides, or metadata. Point instancers can participate in
+particle-style rigid body simulation (prototype collision shapes, batch
+position/velocity updates), but do not support per-instance joints,
+per-instance contact queries, or constraint-based attachment. Point instancers
+express *where* objects are but not *why* they are there or *what owns them.*
 
 ### Relationships and constraints
 
-USD relationships (`UsdRelationship`) can reference other prims, but in
-standard USD they do not affect the transform evaluation pipeline. An
-object cannot "follow" a referenced prim through transform inheritance --
-it can only follow its hierarchical parent.
+USD relationships (`UsdRelationship`) can reference other prims, but in standard
+USD they do not affect the transform evaluation pipeline. An object cannot
+"follow" a referenced prim through transform inheritance -- it can only follow
+its hierarchical parent.
 
 Physics constraints (joints) provide runtime spatial coupling between
 prims, but joint creation is a runtime operation, not a declarative scene
@@ -272,10 +255,9 @@ thousands of simultaneous attachments at factory scale.
 
 ### Namespace editing and relocates
 
-`UsdNamespaceEditor` and relocates can reparent prims, but these are
-authoring-layer operations -- not animatable or runtime-triggerable. They
-change the namespace structure of a stage as a deliberate editorial
-action, not as a function of time.
+`UsdNamespaceEditor` and relocates can reparent prims, but these are authoring-layer
+operations -- not animatable or runtime-triggerable. They change the namespace
+structure of a stage as a deliberate editorial action, not as a function of time.
 
 ## Industry use cases
 
@@ -295,8 +277,8 @@ ownership at scale:
   size 10x (60 MB parented to 600 MB flattened).
 - Production deployments use point instancers at the movable-unit level
   for DES exports, with value-clip composability (static geometry and
-  animation independently authored). Per-instance physics and clash
-  detection are not supported.
+  animation independently authored). Per-instance joints, contact queries,
+  and constraint-based attachment are not supported.
 
 ### Media and Entertainment
 
@@ -398,11 +380,10 @@ being a child of Room 101 in any namespace sense.
 IFC's relationship model does not directly address the time-varying
 parenting problem (IFC relationships are not typically time-sampled), but
 it offers an important architectural insight: spatial containment and
-semantic ownership do not have to be encoded as hierarchy. The AOUSD AECO
-Interest Group's work on mapping IFC concepts to USD is directly relevant
--- they are already navigating the tension between IFC's
-entity-relationship model and USD's hierarchy-based model for spatial
-containment, system membership, and component aggregation.
+semantic ownership do not have to be encoded as hierarchy. The tension
+between IFC's entity-relationship model and USD's hierarchy-based model
+for spatial containment, system membership, and component aggregation is
+directly relevant to the AOUSD AECO Interest Group's scope.
 
 The parallels are worth examining: if USD needs a mechanism to express
 "this part is currently owned by this carrier," it may be closer to IFC's
@@ -411,10 +392,9 @@ hierarchy.
 
 ## Design considerations
 
-This section outlines principles and open questions to guide the
-community toward a solution. The goal is to establish consensus on the
-problem structure and design principles before committing to a specific
-mechanism.
+This section outlines principles and open questions to guide the community
+toward a solution. The goal is to establish consensus on the problem structure
+and design principles before committing to a specific mechanism.
 
 ### Principles
 
@@ -473,8 +453,8 @@ mechanism.
    because they had to -- dynamic relationships are fundamental to their
    workflows. As their content enters USD, the question is which aspects
    of these models can be expressed within USD's composition and caching
-   guarantees, and which cannot. The AECO Interest Group's work on
-   mapping IFC relationships to USD is directly relevant.
+   guarantees, and which cannot. The AECO Interest Group is a natural
+   forum for this analysis.
 
 3. **What are the architectural options, and what does each trade away?**
    Seven approaches span the spectrum from pure runtime to full scene
@@ -484,8 +464,9 @@ mechanism.
      animation and parenting (by baking). Does not cover simulation.
      Data volume scales linearly with the product of objects and time
      samples. Loses parent-child semantics.
-   - **Point instancers.** Most scalable existing representation. Does
-     not support per-instance hierarchy, physics, or addressability.
+   - **Point instancers.** Most scalable existing representation. Supports
+     particle-style rigid body simulation but not per-instance joints,
+     contact queries, or addressability.
    - **Visibility toggling.** Preserves hierarchy at each carrier but
      creates combinatorial prim explosion. Does not represent a single
      persistent object.
@@ -511,10 +492,15 @@ mechanism.
 4. **What level of per-instance identity do vectorized representations
    need?** Point instancers are the most scalable existing
    representation, but they do not support per-instance selection,
-   override, or physics. Extending them with per-instance identity would
-   cover a significant portion of the problem space. The tradeoff: richer
-   per-instance data erodes the performance advantages that make
-   vectorized representations attractive.
+   override, or constraint-based attachment. Extending them with
+   per-instance identity would cover a significant portion of the problem
+   space. The tradeoff: richer per-instance data erodes the performance
+   advantages that make vectorized representations attractive. It is also
+   worth noting that point instancers already support particle-style rigid
+   body simulation -- whether that level of physics is sufficient for
+   certain dynamic ownership use cases (e.g., parts riding conveyors
+   where collision response is needed but joint attachment is not) is
+   itself an open question.
 
 5. **How should objects transition between ownership modes?** The handoff
    between animation, parenting, and simulation is where most practical
@@ -529,7 +515,7 @@ mechanism.
 | Approach              | Hierarchy | Scale  | Identity | Physics | Interop   |
 | --------------------- | --------- | ------ | -------- | ------- | --------- |
 | Baked world-space     | No        | Medium | Yes      | No      | High      |
-| Point instancers      | No        | High   | No       | No      | Medium    |
+| Point instancers      | No        | High   | No       | Partial | Medium    |
 | Visibility toggling   | Yes       | Low    | No       | Yes     | High      |
 | Physics joints        | Yes       | Low    | Yes      | Yes     | High      |
 | Time-varying parents  | Yes       | High   | Yes      | Yes     | Low (new) |
@@ -633,8 +619,8 @@ ecosystem:
    IFC, and game engine architectures each represent dynamic ownership
    differently. As their content enters USD, understanding what these
    models express and what USD's design guarantees can accommodate is
-   prerequisite analysis. The AECO Interest Group's work on IFC-to-USD
-   mapping is a natural starting point.
+   prerequisite analysis. The AECO Interest Group is a natural starting
+   point for this work.
 
 4. **Prototype and measure.** Where competing approaches exist
    (scene-description-level vs. runtime-level, time-varying hierarchy vs.
@@ -671,38 +657,113 @@ and technical judgment are the responsibility of the human authors. The
 AI was used as a drafting tool to accelerate the writing process based on
 context and direction provided by the authors.
 
+The context provided to the AI was itself the product of extensive
+preceding work: stakeholder conversations about factory-scale simulation
+workflows, review of discrete event simulation systems and IFC standards,
+research into the OpenUSD codebase and OpenExec framework, and iterative
+problem space analysis developed over multiple sessions with human review
+at every step. The AI did not participate in those conversations; it
+received their outputs as input for drafting.
+
 ### Context provided to the AI
 
-The following materials were provided as input context for drafting:
+The following materials were gathered by the authors and provided as
+input context. Each item represents human-directed research or
+stakeholder engagement that preceded the drafting process:
 
-1. **Object handling problem space analysis** -- A technology-agnostic
-   analysis of dynamic spatial ownership covering the three ownership
-   modes, scale challenges, workaround tradeoffs, DES prior art, and
-   open questions for the community. Developed over two sessions with
-   internal review and a clarity pass from Aaron Luk.
+1. **Stakeholder sync transcript** -- A recorded meeting between domain
+   experts covering factory-scale object handling pain points, point
+   instancer limitations, physics switching requirements, and DES-to-USD
+   export gaps.
 
-2. **USD/Omniverse-specific instantiation** -- USD mechanisms
-   (hierarchy, point instancers, namespace editing, physics
-   constraints), Omniverse tooling (VFI Guide, Surface Gripper,
-   Conveyor Extension, Fabric, Warp), field observations, and an
-   8-step straw-man roadmap.
+2. **Jira user stories** -- Three user stories (POC, EA, GA) tracking
+   the object handling work from discovery through factory-scale
+   deployment. These defined the scope and acceptance criteria that the
+   proposal addresses.
 
-3. **User stories** -- Three user stories (POC, EA, GA) covering
-   discovery through factory-scale deployment.
+3. **Technology-agnostic problem space analysis** -- A separate document
+   analyzing dynamic spatial ownership across any system that uses a
+   hierarchical scene graph, covering the three ownership modes, scale
+   challenges, workaround tradeoffs, and open questions for the
+   community. Developed over two multi-prompt sessions with human review
+   and correction at each step, followed by a clarity pass from
+   Aaron Luk that broadened the cross-domain framing to include film,
+   games, and destruction/crowd use cases alongside manufacturing.
 
-4. **[Separation of Concerns for Identifiers](../identifier_separation_of_concerns/README.md)**
-   and **[Units and Scale](../units_and_scale/README.md)** proposals --
-   Used as structural and formatting references.
+4. **USD/Omniverse-specific analysis** -- A companion document covering
+   USD mechanisms (hierarchy, point instancers, namespace editing,
+   physics constraints), Omniverse tooling (VFI Guide, Surface Gripper,
+   Conveyor Extension, Fabric, Warp), and an 8-step straw-man roadmap
+   designed to be validated by the POC.
 
-5. **Internal methodology template** -- The recurring pattern of
-   reframing longstanding frustration as standardization + technology
-   co-dependency, separating concerns, and driving community ownership.
+5. **DES system documentation** -- Plant Simulation, FlexSim, AnyLogic,
+   Visual Components, Arena, Simio, ExtendSim. Reviewed for the
+   decoupled-ownership architectural pattern and the DES-to-USD export
+   gap.
 
-6. **DES system documentation** -- Plant Simulation, FlexSim, AnyLogic,
-   Visual Components, Arena, Simio, ExtendSim. Reviewed for
-   the decoupled-ownership architectural pattern and the DES-to-USD
-   export gap.
+6. **IFC standards research** -- Review of IFC's entity-relationship
+   model (`IfcRelContainedInSpatialStructure`, `IfcRelAggregates`,
+   `IfcRelConnectsElements`) to understand how spatial containment and
+   aggregation are expressed without hierarchy.
 
-7. **Field observations** -- Internal observations from virtual factory
-   deployments including workaround costs, data volume measurements, and
-   point instancer limitations.
+7. **OpenExec documentation and API reference** -- Research into
+   OpenExec's computation framework (shipping with OpenUSD v25.08),
+   including the `Relationship()` object accessor and its architectural
+   parallel to the DES mutable-ownership-pointer pattern.
+
+8. **Isaac Sim extension documentation** -- Review of the Surface
+   Gripper extension (D6 joints, force limits, batch operations) and
+   Conveyor extension to understand existing runtime attachment
+   mechanisms and their scale limitations.
+
+9. **Existing proposals in this repository** -- The
+   [Separation of Concerns for Identifiers](../identifier_separation_of_concerns/README.md)
+   and [Units and Scale](../units_and_scale/README.md) proposals were
+   used as structural and formatting references.
+
+10. **Field observations** -- Internal observations from virtual factory
+    deployments including workaround costs, data volume measurements,
+    and point instancer limitations.
+
+### Review and refinement
+
+The draft was refined through multiple rounds of review. Key editorial
+decisions included:
+
+- Compressing the introduction from the problem space document's
+  55-line version to 3 paragraphs, relocating the factory walkthrough
+  into "Why Scene Graphs Cannot Express Dynamic Ownership" as concrete
+  motivation.
+- Adding the co-dependency framing: the ecosystem must determine whether
+  dynamic ownership should be expressed in the scene description or the
+  runtime, but cannot make that decision without prototype evidence.
+  Iteratively refined from a prescriptive "the ecosystem must decide"
+  to an exploratory framing grounded in the observation that the
+  industries adopting USD already built their data models around
+  dynamic relationships.
+- Adding IFC entity-relationship models as prior art alongside DES,
+  after identifying that IFC's explicit relationship objects
+  (containment, aggregation, connection) offer a complementary
+  architectural insight to DES's mutable-pointer pattern.
+- Expanding the OpenExec reference from a 4-line placeholder to a
+  substantive analysis, including the `Relationship()` accessor as a
+  DES mutable-pointer analogue, and adding computation-driven
+  attachment as a seventh architectural approach in the tradeoff
+  analysis.
+- Correcting the claim that point instancers "cannot participate in
+  physics" -- PhysX supports collision on point instancer prototypes.
+  Replaced with accurate framing: PIs support particle-style rigid body
+  simulation but not per-instance joints, contact queries, or
+  constraint-based attachment. Added this as an open question: whether
+  PI-level physics is sufficient for certain dynamic ownership use
+  cases is itself worth examining.
+- Reframing the Film and game production bullet to acknowledge that
+  DCC constraint rigs baked into USD are a working workflow at shot
+  scale, rather than implying M&E doesn't have a solution.
+- Updating the Isaac Sim Surface Gripper description from "fixed joints,
+  CPU-only" to "D6 joints with configurable force limits" per current
+  documentation.
+- Removing partner and customer names from the document.
+
+A prompt-level drafting log for the problem space documents has been
+archived separately.
