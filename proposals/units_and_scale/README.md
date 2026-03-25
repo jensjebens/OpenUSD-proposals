@@ -579,7 +579,14 @@ and bring concrete experience, not preferences.
      corrective scale into geometry and attributes; preserve originals
      alongside. Best runtime performance, but destructive to source
      data. Shared assets across pipelines with different targets
-     require forking or variant strategies.
+     require forking or variant strategies. A non-destructive variant
+     of this approach writes converted values as **overs in a session
+     sublayer**, leaving the source layer untouched -- the override
+     layer can be removed to revert. This requires knowledge of
+     dimensional exponents for every unit-bearing attribute (the same
+     registry or schema metadata needed for assembly correction), but
+     produces a stage where any consumer reads correct values with
+     plain `attr.Get()` -- no unit-aware API needed downstream.
    - **Correct at assembly.** Author non-destructive corrective
      transforms at reference boundaries; source assets remain
      untouched. Good interactive UX, auditable and reversible. Cost
@@ -1026,6 +1033,20 @@ The implementation covers ~950 lines of library code, ~2,000 lines of
 tests (133 tests across 6 programmatic test stages), and a dimensional
 registry of 26 entries spanning transforms, camera, lights, physics,
 and PointInstancer attributes. Built against OpenUSD 26.3.
+
+The POC has been validated inside **Omniverse Kit 110** as a Kit
+extension (`omni.units_api`) with 35 passing headless tests covering
+all six attribute domains. The Kit integration is available at
+[`jensjebens/omni-units-api`](https://github.com/jensjebens/omni-units-api).
+
+In addition to the per-attribute lens and assembly correction, the POC
+includes a **`bake_to_units()`** function that demonstrates the
+non-destructive variant of "convert at ingest" described in open
+question 2: all unit-bearing attribute values are converted and written
+as overs in a session sublayer, so downstream consumers see correct
+values with plain `attr.Get()` without needing the unit-aware API.
+The original layer is untouched; removing the override layer reverts
+the conversion.
 
 ## Appendix D: Implementation Exploration — Evaluation-Time Unit Resolution
 
