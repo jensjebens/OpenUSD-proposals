@@ -315,6 +315,20 @@ convention*. They do not annotate individual attributes. A density
 value on a physics prim has no declared unit dimension -- the system
 cannot determine whether it should scale as length⁻³ or not at all.
 
+Notably, the UsdPhysics schema *does* declare unit dimensions for its
+attributes -- but only as human-readable doc strings, not as
+machine-readable metadata. The schema consistently uses a `Units:`
+convention: `Units: mass/distance/distance/distance` for density,
+`Units: distance/second/second` for gravity, `Units: distance/second`
+for velocity, `Units: mass*distance*distance` for inertia. This
+information is precise, correct, and already maintained by the Physics
+Working Group -- but it is trapped in prose. No tool can consume it
+programmatically without string parsing. The intellectual work of
+determining dimensional exponents has been done; the gap is purely one
+of encoding: the same information expressed as structured metadata
+(e.g., `customData` on attribute definitions) would be directly
+consumable by conversion tools and validators.
+
 ### Time remapping vs. spatial remapping
 
 USD provides `SdfLayerOffset` for automatic time remapping at
@@ -617,6 +631,19 @@ and bring concrete experience, not preferences.
    unit-bearing attributes, that knowledge is directly useful --
    bring it to the relevant WG.
 
+   Note that this concern is **orthogonal to MetricsAPI** (open
+   question 3). MetricsAPI answers "what unit system is this subtree
+   in?" -- the unit *context*. Dimensional exponents answer "how does
+   this attribute scale with that context?" -- the conversion *rule*.
+   Both are required to compute a correct conversion factor, but they
+   are independent: MetricsAPI applies at the prim level and is the
+   same for all attributes on a prim, while dimensional exponents are
+   schema-level invariants (every `physics:density` is always
+   M¹·L⁻³, regardless of which prim it appears on). As noted above,
+   UsdPhysics already declares these exponents in doc strings -- the
+   path forward is to formalize them as structured schema metadata,
+   not to conflate them with prim-level unit declarations.
+
 5. **How should unit-aware value resolution work?**
    A computational layer that resolves units during value evaluation
    (rather than requiring every consumer to re-implement conversion)
@@ -784,6 +811,13 @@ ecosystem:
    UsdShade, and UsdGeomCamera is needed to establish the completeness
    scope for any conversion mechanism. The Geometry, Physics, and
    Materials Working Groups are the right venues for this work.
+   UsdPhysics provides a head start: its schema already declares
+   unit dimensions for every physics attribute via a consistent
+   `Units:` doc-string convention. Formalizing these as structured,
+   machine-readable metadata (rather than prose) is a concrete,
+   low-risk first step that the Physics WG could undertake
+   independently. The same approach should then be extended to
+   UsdGeom, UsdLux, and UsdShade.
 
 5. **Prototype evaluation-time resolution.** Based on alignment from
    steps 2--4, prototype an opt-in unit-aware value resolution API on
