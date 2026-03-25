@@ -32,6 +32,7 @@ Jens Jebens
 - [Next steps](#next-steps)
 - [Appendix A: What conversion does not cover](#appendix-a-what-conversion-does-not-cover)
 - [Appendix B: AI-Assisted Drafting](#appendix-b-ai-assisted-drafting)
+- [Appendix C: Proof-of-Concept Implementation](#appendix-c-proof-of-concept-implementation)
 
 ## Introduction
 
@@ -950,3 +951,43 @@ decisions included:
 
 A prompt-level drafting log for the problem space documents has been
 archived separately.
+
+## Appendix C: Proof-of-Concept Implementation
+
+A proof-of-concept Python library implementing the mechanisms described
+in this proposal is available at:
+
+**[`extras/units_api` on the `jjebens/units-api-poc` branch](https://github.com/jensjebens/OpenUSD/tree/jjebens/units-api-poc/extras/units_api)**
+
+The POC validates the three-layer design empirically — MetricsAPI
+(prim-level unit declarations with ancestor inheritance), a dimensional
+registry (schema-level exponent mappings), and per-attribute metadata
+(self-describing annotations for custom attributes) — plus two consumer
+APIs: **UnitsLens** for unit-aware attribute get/set and
+**MetricsAssembler** for non-destructive corrective transforms at
+reference boundaries.
+
+### Key findings
+
+- **Prim-level MetricsAPI is the right primary mechanism.** For a
+  representative stage, 2 prim-level annotations achieve the same
+  correctness as 66 per-attribute annotations (33× less overhead).
+- **Per-attribute metadata is essential for custom attributes.** The
+  dimensional registry cannot know about pipeline-specific attributes;
+  per-attribute annotation makes them self-describing.
+- **Dimensional exponents are schema-invariant.** Every
+  `xformOp:translate` is L¹, every `physics:density` is M¹·L⁻³.
+  This never changes per-prim and belongs in schema definitions.
+- **Assembly correction and UnitsLens compose correctly.** Corrective
+  `xformOp:scale` for transforms plus UnitsLens for derived quantities
+  provides complete coverage.
+- **Animation curves require tangent slope scaling.** For bezier
+  splines, values and slopes scale by the unit ratio; tangent widths
+  (time) are preserved.
+
+### Scope
+
+The implementation covers ~950 lines of library code, ~2,000 lines of
+tests (133 tests across 6 programmatic test stages), and a dimensional
+registry of 26 entries spanning transforms, camera, lights, physics,
+and PointInstancer attributes. Built against OpenUSD 26.3.
