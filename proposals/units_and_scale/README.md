@@ -32,7 +32,7 @@ Jens Jebens
 - [Next steps](#next-steps)
 - [Appendix A: What conversion does not cover](#appendix-a-what-conversion-does-not-cover)
 - [Appendix B: AI-Assisted Drafting](#appendix-b-ai-assisted-drafting)
-- [Appendix C: Proof-of-Concept Implementation](#appendix-c-proof-of-concept-implementation)
+- [Appendix C: Units API Proof of Concept](#appendix-c-units-api-proof-of-concept)
 
 ## Introduction
 
@@ -952,7 +952,7 @@ decisions included:
 A prompt-level drafting log for the problem space documents has been
 archived separately.
 
-## Appendix C: Proof-of-Concept Implementation
+## Appendix C: Units API Proof of Concept
 
 A proof-of-concept Python library implementing the mechanisms described
 in this proposal is available at:
