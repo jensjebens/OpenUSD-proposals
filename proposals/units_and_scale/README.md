@@ -1048,6 +1048,16 @@ values with plain `attr.Get()` without needing the unit-aware API.
 The original layer is untouched; removing the override layer reverts
 the conversion.
 
+The POC is built on a shared C++ foundation
+([`jjebens/metrics-api-core`](https://github.com/jensjebens/OpenUSD/tree/jjebens/metrics-api-core/extras/usd/metricsApiCore))
+that provides real USD applied schemas (`UsdGeomMetricsAPI`,
+`UsdPhysicsMetricsAPI`), a plugin-discoverable dimensional exponent
+registry via `plugInfo.json`, and ancestor-walk resolution functions
+with Python bindings. The Python POC is a portable implementation for
+environments without the C++ core; the C++ core serves OpenExec and
+Hydra consumers. Both share symmetric tests to ensure the
+implementations remain equivalent.
+
 ## Appendix D: Implementation Exploration — Evaluation-Time Unit Resolution
 
 This appendix documents a proof-of-concept implementation of evaluation-time
