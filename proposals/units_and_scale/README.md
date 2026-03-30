@@ -1251,13 +1251,22 @@ remains the established approach for compatibility with all consumers.
 
 ### Limitations and future work
 
-1. **Stage-level metersPerUnit** is currently assumed to be 1.0
-   (meters) in the OpenExec computation. The long-term solution is a
-   stage-level computation via `Stage().Computation<double>` or
-   `GeomMetricsAPI` applied to the stage root prim.
+1. **upAxis Y↔Z rotation** — The computation architecture for upAxis
+   correction is implemented (self-referencing `NamespaceAncestor` for
+   inherited resolution, same pattern as `execGeom`'s L2W), but is
+   blocked by an OpenExec program state conflict when multiple prims
+   with exec computations are evaluated sequentially via
+   `HdExecComputedTransformSceneIndex`. See
+   [jensjebens/OpenUSD#4](https://github.com/jensjebens/OpenUSD/issues/4)
+   for details and reproduction steps. metersPerUnit correction works
+   end-to-end.
 
-2. **upAxis Y↔Z rotation** is not yet implemented in the OpenExec
-   computation (it was validated in the earlier Python POC).
+2. **Inherited attribute semantics** — `GeomMetricsAPI` uses sentinel
+   defaults (`metersPerUnit = 0`, `upAxis = "inherited"`) following the
+   same pattern as `UsdGeomImageable::visibility`. Effective values are
+   resolved via self-referencing `NamespaceAncestor` computations
+   (`computeEffectiveMetersPerUnit`), matching `execGeom`'s
+   `computeLocalToWorldTransform` architecture.
 
 3. **Camera, light, and physics attributes** beyond transforms are
    not yet covered by the Hydra integration but follow the same
@@ -1278,3 +1287,4 @@ remains the established approach for compatibility with all consumers.
 | Kit extension (Warp) | workspace | `kit-investigation/omni.units.resolution/` |
 | Kit extension (Python API) | [`jensjebens/omni-units-api`](https://github.com/jensjebens/omni-units-api) | `source/extensions/omni.units_api/` |
 | PR #1 | `feature/exec-hydra-scene-filter` → `dev` | [jensjebens/OpenUSD#1](https://github.com/jensjebens/OpenUSD/pull/1) |
+| OpenExec multi-prim issue | — | [jensjebens/OpenUSD#4](https://github.com/jensjebens/OpenUSD/issues/4) |
