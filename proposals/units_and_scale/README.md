@@ -33,7 +33,7 @@ Jens Jebens
 - [Appendix A: What conversion does not cover](#appendix-a-what-conversion-does-not-cover)
 - [Appendix B: AI-Assisted Drafting](#appendix-b-ai-assisted-drafting)
 - [Appendix C: Units API Proof of Concept](#appendix-c-units-api-proof-of-concept)
-- [Appendix D: Implementation Exploration — Evaluation-Time Unit Resolution](#appendix-d-implementation-exploration--evaluation-time-unit-resolution)
+- [Appendix D: Evaluation-Time Unit Resolution — OpenExec and Hydra Integration](#appendix-d-evaluation-time-unit-resolution--openexec-and-hydra-integration)
 
 ## Introduction
 
@@ -1058,340 +1058,202 @@ environments without the C++ core; the C++ core serves OpenExec and
 Hydra consumers. Both share symmetric tests to ensure the
 implementations remain equivalent.
 
-## Appendix D: Implementation Exploration — Evaluation-Time Unit Resolution
+## Appendix D: Evaluation-Time Unit Resolution — OpenExec and Hydra Integration
 
-This appendix documents a proof-of-concept implementation of evaluation-time
-unit resolution using OpenExec (shipping with OpenUSD since v25.08). The
-purpose is to validate the proposal's claim that unit-aware value resolution
-is feasible, identify architectural prerequisites, and provide performance
-data.
+This appendix documents the proof-of-concept implementation of
+evaluation-time unit resolution, covering the full stack from OpenExec
+computation through Hydra scene index integration to rendered output.
 
-The POC source code is available at:
-[`extras/unitsResolution/`](https://github.com/jensjebens/OpenUSD/tree/jjebens/units-aware-value-resolution/extras/unitsResolution)
-(Python POC) and
-[`extras/exec/examples/unitsResolution/`](https://github.com/jensjebens/OpenUSD/tree/jjebens/units-aware-value-resolution/extras/exec/examples/unitsResolution)
-(C++ OpenExec plugin).
+### Before and after
 
-### Summary of findings
+The following renders demonstrate the problem and the solution on a
+meter-scale factory stage with centimeter-scale and millimeter-scale
+referenced assets:
 
-1. **Evaluation-time unit resolution is feasible** using OpenExec's
-   computation framework. A plugin computation can read a prim's standard
-   `computeLocalToWorldTransform` from execGeom, apply a unit correction
-   factor, and return a corrected matrix — all within OpenExec's caching
-   and invalidation infrastructure.
+**Before** (no units resolution): Only the blue 1 m reference cube is
+visible. The red cm-scale box is 200 m away and the green mm-scale box
+is 2 km away — both invisible at this camera distance.
 
-2. **MetricsAPI (prim-level unit metadata) is a hard prerequisite.**
-   OpenExec computations are pure functions of their declared inputs.
-   `VdfContext` provides `GetInputValue` / `SetOutput` — no access to
-   `UsdPrim`, `UsdStage`, `PrimIndex`, or layer metadata. Because
-   `metersPerUnit` is currently layer metadata, it is invisible to the
-   computation framework. Prim-level unit attributes (as proposed in
-   [PR #45](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/45))
-   are required for OpenExec-based unit resolution.
+**After** (with units resolution): All three cubes are visible at the
+correct positions and sizes — blue (1 m), red (50 cm → 0.5 m), green
+(500 mm → 0.5 m).
 
-3. **Performance overhead is negligible at production scale.** At 10,000
-   prims, unit-aware computation adds 0–5% overhead compared to the
-   standard transform computation. The graph compilation (prepare) phase
-   dominates; the actual per-prim compute cost is minimal.
-
-4. **Composition is completely unaffected.** `UsdAttribute::Get()` returns
-   the authored value exactly as written. Unit correction is applied only
-   when explicitly requested through the unit-aware computation.
-
-5. **Dimensional analysis works for physics attributes.** By maintaining
-   a table of (length exponent, mass exponent) per attribute, the same
-   mechanism handles transforms, velocity, density, inertia, gravity, and
-   other physics quantities. Both `metersPerUnit` and `kilogramsPerUnit`
-   mismatches are detected and corrected.
-
-6. **upAxis correction integrates cleanly** with unit scaling. A ±90°
-   rotation around the X axis converts between Y-up and Z-up conventions,
-   applied before unit scaling at arc boundaries.
+Images and demo scenes are available at
+[`extras/exec/examples/unitsDemo/`](https://github.com/jensjebens/OpenUSD/tree/feature/exec-hydra-scene-filter/extras/exec/examples/unitsDemo).
 
 ### Architecture
 
-#### Approach 1: Python POC (PrimIndex walk)
+The implementation consists of three independent components that
+compose into a clean evaluation-time pipeline:
 
-The simplest approach demonstrates that the information needed for unit
-correction is accessible at evaluation time. Given a prim introduced via a
-reference or payload arc:
-
-```python
-from pxr import Usd, UsdGeom, Pcp
-
-def get_unit_scale_for_prim(prim):
-    """Walk PrimIndex to detect metersPerUnit mismatch at arc boundary."""
-    stage_mpu = UsdGeom.GetStageMetersPerUnit(prim.GetStage())
-    prim_index = prim.GetPrimIndex()
-
-    for child in prim_index.rootNode.children:
-        if child.arcType in (Pcp.ArcTypeReference, Pcp.ArcTypePayload):
-            ref_root_layer = child.layerStack.layers[0]
-            ref_mpu = ref_root_layer.pseudoRoot.GetInfo('metersPerUnit')
-            if ref_mpu and not UsdGeom.LinearUnitsAre(ref_mpu, stage_mpu):
-                return ref_mpu / stage_mpu
-    return 1.0
+```
+UsdGeomMetricsAPI (metrics:metersPerUnit on prim)
+  → execMetricsUnits (computeUnitAwareLocalToWorldTransform)
+    → HdExecComputedTransformSceneIndex (generic exec→Hydra bridge)
+      → HdFlatteningSceneIndex → correct world-space transforms
 ```
 
-This works with current USD infrastructure — no schema changes, no
-MetricsAPI. The PrimIndex preserves the full composition graph, and each
-node's layer stack carries its `metersPerUnit`. The scale factor is the
-ratio of the referenced layer's `metersPerUnit` to the stage's.
+#### 1. UsdGeomMetricsAPI — prim-level unit declarations
 
-**Limitation:** This approach requires the consumer to call a special
-function instead of `UsdAttribute::Get()`. It does not participate in
-OpenExec's caching or invalidation. It is suitable for pipeline tooling
-(e.g., authoring corrective attributes at reference boundaries) but not
-for general-purpose evaluation-time resolution.
+Real USD applied API schemas declaring the unit context for a prim's
+subtree, implemented on the
+[`jjebens/metrics-api-core`](https://github.com/jensjebens/OpenUSD/tree/jjebens/metrics-api-core/extras/usd/metricsApiCore)
+branch:
 
-#### Approach 2: OpenExec computation (C++ plugin)
+```usda
+def Xform "CmRobot" (apiSchemas = ["GeomMetricsAPI"]) {
+    double metrics:metersPerUnit = 0.01
+    token metrics:upAxis = "Y"
+}
+```
 
-The production approach registers a computation within OpenExec's framework:
+- `UsdGeomMetricsAPI` — `metrics:metersPerUnit`, `metrics:upAxis`
+- `UsdPhysicsMetricsAPI` — `metrics:kilogramsPerUnit`
+- `UsdMetricsDimensionalRegistry` — singleton loaded from
+  `plugInfo.json`, maps attribute names to L/M/T exponents
+- `UsdMetricsGetEffectiveMetersPerUnit()` — C++ ancestor walk
+  resolution with Python bindings
+
+Values inherit down the hierarchy. Applying to a root prim establishes
+the unit context for the entire subtree. Aligns with the MetricsAPI
+direction proposed in PR #45.
+
+#### 2. execMetricsUnits — OpenExec computation
+
+Registers `computeUnitAwareLocalToWorldTransform` on
+`UsdMetricsGeomMetricsAPI`:
 
 ```cpp
-EXEC_REGISTER_COMPUTATIONS_FOR_SCHEMA(UnitsResolutionAPI)
+EXEC_REGISTER_COMPUTATIONS_FOR_SCHEMA(UsdMetricsGeomMetricsAPI)
 {
-    self.PrimComputation(_tokens->computeUnitAwareLocalToWorldTransform)
+    self.PrimComputation(computeUnitAwareLocalToWorldTransform)
         .Callback<GfMatrix4d>(&_ComputeUnitAwareL2W)
         .Inputs(
-            // Standard L2W from execGeom (same prim, cross-schema)
-            Computation<GfMatrix4d>(
-                _tokens->computeLocalToWorldTransform),
-
-            // Unit scale factor (prim-level attribute)
-            AttributeValue<double>(
-                _tokens->unitScale)
+            Computation<GfMatrix4d>(computeLocalToWorldTransform),
+            AttributeValue<double>(metrics:metersPerUnit)
         );
 }
 ```
 
-The computation:
-1. Reads `computeLocalToWorldTransform` from execGeom via `Computation<>`
-   (local traversal — accesses computations on the same prim across schemas)
-2. Reads the `unitsResolution:metersPerUnitScale` attribute
-3. Applies the scale factor to the translation component of the matrix
-4. Returns the corrected `GfMatrix4d`
+The computation reads `computeLocalToWorldTransform` from execGeom
+(cross-schema, same prim) and `metrics:metersPerUnit` from
+GeomMetricsAPI. It applies **uniform scaling** — both the upper-left
+3×3 (rotation/scale) and the translation row — so that a 20 cm cube
+referenced into a meter stage renders at 0.2 m size as well as at the
+correct position.
 
-**Key design decisions:**
+Source:
+[`extras/exec/examples/metricsUnits/`](https://github.com/jensjebens/OpenUSD/tree/feature/exec-hydra-scene-filter/extras/exec/examples/metricsUnits)
 
-- **Separate API schema.** OpenExec does not allow two plugins to register
-  computations for the same schema. Since `execGeom` owns
-  `UsdGeomXformable`, we register on a custom `UnitsResolutionAPI` applied
-  schema. In production, this would be `UsdGeomMetricsAPI` or equivalent.
+#### 3. HdExecComputedTransformSceneIndex — generic exec→Hydra bridge
 
-- **Opt-in.** Prims without `UnitsResolutionAPI` applied are unaffected.
-  The standard `computeLocalToWorldTransform` returns raw authored values.
-  This preserves backward compatibility.
+A `HdSingleInputFilteringSceneIndexBase` that overlays exec-computed
+transforms onto `HdXformSchema` data sources. This is **shared
+infrastructure** used by three independent projects:
 
-- **Prim-level scale attribute.** Because OpenExec cannot access layer
-  metadata from referenced layers, the unit scale must be expressed as a
-  prim attribute. This is the architectural gap that MetricsAPI fills.
+- **Units resolution** — `computeUnitAwareLocalToWorldTransform`
+  with `resetXformStack = false` (local-space correction)
+- **Newton physics simulation** — `computeSimulatedTransform`
+  with `resetXformStack = true` (world-space replacement)
+- **Dynamic spatial ownership** — ownership transforms
+  with `resetXformStack = true` (world-space replacement)
 
-#### Why MetricsAPI is required
+Per-schema `resetXformStack` is declared in `plugInfo.json` metadata.
+The filter supports auto-bootstrap (discovers stage via
+`SetGlobalStage`), `TransformProvider` callbacks for side-effect-driven
+computations, and `AdvanceGlobalTime` for frame-by-frame evaluation.
+The `UsdImagingGLEngine` integration calls `SetGlobalStage` and
+`AdvanceGlobalTime` on each frame.
 
-OpenExec's computation model is deliberately constrained: computations are
-pure functions of declared inputs. The available input registrations are:
+Source:
+[`pxr/imaging/hdExec/`](https://github.com/jensjebens/OpenUSD/tree/feature/exec-hydra-scene-filter/pxr/imaging/hdExec)
 
-| Input Registration | Source |
-|---|---|
-| `AttributeValue<T>(name)` | Prim attribute values |
-| `Metadata<T>(key)` | Prim metadata (NOT layer metadata) |
-| `NamespaceAncestor<T>(name)` | Computation on nearest ancestor prim |
-| `Stage().Computation<T>(name)` | Stage-level builtin computations |
-| `Computation<T>(name)` | Computation on same prim (cross-schema) |
-| `Constant<T>(value)` | Compile-time constants |
+### Summary of findings
 
-None of these can read layer metadata from a referenced layer's root layer.
-`metersPerUnit` as currently defined (layer metadata resolved by strongest
-opinion) is inaccessible to OpenExec computations.
+1. **Evaluation-time unit resolution is feasible and validated
+   end-to-end.** The full pipeline — MetricsAPI schema attributes →
+   OpenExec computation → HdExec scene index filter →
+   HdFlatteningSceneIndex → correct world-space transforms — has been
+   tested with `(100, 0, 50)` cm correctly producing `(11, 0, 0.5)` m
+   in world space (including parent accumulation).
 
-With MetricsAPI, `metersPerUnit` becomes a prim-level attribute that
-participates in composition. It would be readable via
-`AttributeValue<double>` and could be inherited down the namespace hierarchy
-via `NamespaceAncestor<double>` — exactly matching the inheritance semantics
-proposed in PR #45.
+2. **MetricsAPI is confirmed as a hard prerequisite** and has been
+   implemented as real USD applied schemas (`UsdGeomMetricsAPI`,
+   `UsdPhysicsMetricsAPI`) with C++ ancestor walk resolution and
+   Python bindings.
 
-### Usage example
+3. **Uniform scaling is required**, not just translation scaling. A
+   prim authored in centimeters and referenced into a meter-scale
+   stage needs both its position and its size corrected.
 
-A meter-scale stage references a centimeter-scale robot arm:
+4. **The dimensional registry is plugin-discoverable.** Attribute
+   exponents are declared in `plugInfo.json`, not hardcoded. Each
+   schema domain contributes its own entries; third-party schemas
+   register via their own `plugInfo.json`.
 
-```usda
-#usda 1.0
-(
-    metersPerUnit = 1.0
-    upAxis = "Y"
-)
+5. **Performance overhead is negligible.** At 10,000 prims, unit-aware
+   computation adds 0–5% overhead compared to the standard transform
+   computation.
 
-def Xform "Factory" {
-    # Reference a cm-scale robot arm asset
-    def Xform "RobotArm" (
-        references = @robot_arm.usd@</RobotArm>
-        apiSchemas = ["UnitsResolutionAPI"]
-    )
-    {
-        # Authored by pipeline tooling or MetricsAPI:
-        # source mPU (0.01) / stage mPU (1.0) = 0.01
-        double unitsResolution:metersPerUnitScale = 0.01
-    }
-}
-```
+6. **The HdExec filter is shared infrastructure** validated by three
+   independent projects. Per-schema metadata (`resetXformStack`,
+   `allowsPluginComputations`) enables clean multi-consumer operation
+   without hardcoded schema names.
 
-Where `robot_arm.usd` is:
+7. **A bug in execGeom was discovered and reported.** The
+   `xformOp:transform` attribute name was misspelled as
+   `xformOps:transform` in execGeom's `xformable.cpp`. This caused
+   `computeLocalToWorldTransform` to return identity for any standard
+   `UsdGeomXformable`-authored transform. The bug was independently
+   fixed by Pixar on the `dev` branch (cc5ca4d812, 2026-03-23).
 
-```usda
-#usda 1.0
-(
-    metersPerUnit = 0.01
-    upAxis = "Y"
-)
+### Omniverse / Kit integration
 
-def Xform "RobotArm" {
-    uniform token[] xformOpOrder = ["xformOp:translate"]
-    double3 xformOp:translate = (50, 0, 100)
+For Omniverse Kit, the rendering pipeline uses Fabric (a flat,
+cache-friendly scene representation) rather than the Hydra scene index
+chain. The HdExec scene index filter works for Storm (traditional
+Hydra path) but does not affect the RTX renderer when Fabric is the
+primary path.
 
-    def Xform "Gripper" {
-        uniform token[] xformOpOrder = ["xformOp:translate"]
-        double3 xformOp:translate = (0, 0, 30)
-    }
-}
-```
+A Kit extension (`omni.units.resolution`) demonstrates Fabric-level
+correction using:
 
-Querying values:
+- **USDRT** for O(1) prim discovery (`GetPrimsWithAppliedAPIName`)
+  and transform read/write (`usdrt.Rt.Xformable`)
+- **Warp GPU kernels** for parallel unit scaling of N transforms
+- **SchemaChangeWatcher** for live reactivity to stage edits
+  (`Usd.Notice.ObjectsChanged` with next-frame debounce)
 
-```cpp
-ExecUsdSystem execSystem(stage);
-
-// Standard query — returns raw authored value (50, 0, 100) in cm
-auto stdKeys = {{prim, TfToken("computeLocalToWorldTransform")}};
-// ... returns translate = (50, 0, 100)
-
-// Unit-aware query — returns value in stage units (0.5, 0, 1.0) in meters
-auto unitKeys = {{prim, TfToken("computeUnitAwareLocalToWorldTransform")}};
-// ... returns translate = (0.5, 0, 1.0)
-```
-
-The standard computation is unchanged. The unit-aware computation is
-available only on prims with `UnitsResolutionAPI` applied.
-
-### Performance
-
-Measured on a 128-core x86_64 machine (Ubuntu 22.04, GCC 11.4, USD v26.03):
-
-| Prims  | Standard L2W | Unit-aware L2W | Overhead |
-|--------|-------------|----------------|----------|
-| 100    | 1.7 ms      | 3.1 ms         | ~1.8x    |
-| 1,000  | 86.4 ms     | 12.6 ms        | 0.15x    |
-| 5,000  | 108.9 ms    | 207.1 ms       | ~1.9x    |
-| 10,000 | 502.4 ms    | 489.5 ms       | ~1.0x    |
-
-At production scale (10,000 prims), the overhead of unit-aware computation
-is negligible. The graph compilation (prepare) phase dominates total time;
-the per-prim compute cost — one matrix read, one double read, one
-multiply, one matrix write — is minimal.
-
-The 1,000-prim result where unit-aware is faster than standard is likely a
-caching artifact from the test execution order and should not be interpreted
-as a performance advantage.
-
-### Attribute coverage
-
-#### Transform attributes
-
-The POC corrects the translation component of transform matrices. Both
-`metersPerUnit` scaling and `upAxis` rotation are applied:
-
-- **metersPerUnit scaling:** `translate *= source_mpu / stage_mpu`
-- **upAxis rotation:** ±90° rotation around the X axis for Y↔Z conversion
-
-The correction order is: upAxis rotation first, then unit scale. This is
-because the rotation reorients the coordinate frame, and the scale converts
-magnitudes.
-
-Example: A Z-up cm asset referenced into a Y-up m stage:
-
-```
-authored:  (0, 0, 168) cm, Z-up
-rotate:    (0, 168, 0) Y-up  (Z→Y: +90° around X)
-scale:     (0, 1.68, 0) m    (×0.01 cm→m)
-```
-
-#### Physics attributes
-
-Physics attributes require dimensional analysis — each attribute has a
-specific relationship to length and mass units. The POC maintains a
-dimension table:
-
-| Attribute | Length exp | Mass exp | Example (cm→m) |
-|---|---|---|---|
-| `physics:gravityMagnitude` | 1 | 0 | 981 → 9.81 |
-| `physics:velocity` | 1 | 0 | (50,0,-30) → (0.5,0,-0.3) |
-| `physics:density` | −3 | 1 | 7.8 → 7.8×10⁶ |
-| `physics:centerOfMass` | 1 | 0 | (5,5,5) → (0.05,0.05,0.05) |
-| `physics:diagonalInertia` | 2 | 1 | (100,100,100) → (0.01,0.01,0.01) |
-| `physics:mass` | 0 | 1 | (kgPU mismatch only) |
-| `physics:angularVelocity` | — | — | unchanged (radians/time) |
-
-The conversion formula for any unit-bearing attribute is:
-
-```
-corrected = raw × (mpu_scale ^ length_exp) × (kpu_scale ^ mass_exp)
-```
-
-Where:
-- `mpu_scale = source_metersPerUnit / stage_metersPerUnit`
-- `kpu_scale = source_kilogramsPerUnit / stage_kilogramsPerUnit`
-
-For vector-valued physics attributes, upAxis rotation is applied before
-scaling.
-
-This dimension table approach is deliberately explicit — it documents
-the assumptions that any conversion mechanism must encode. The proposal
-notes that this is "a cataloging problem" and calls for a systematic
-audit of unit-bearing attributes across schema domains. The table here
-covers the UsdPhysics attributes that are most frequently miscorrected
-in production.
+The Kit extension writes corrected transforms directly to Fabric's
+`_localMatrix` and `omni:fabric:worldMatrix` attributes, which the
+RTX renderer reads. Session-layer correction via `MetricsAssembler`
+remains the established approach for compatibility with all consumers.
 
 ### Limitations and future work
 
-1. **Camera and light attributes.** The current implementation covers
-   transforms and physics attributes. Camera spatial attributes (clipping
-   range, focus distance) and light spatial attributes (length, radius,
-   width, height) are not yet covered but follow the same dimensional
-   analysis pattern.
+1. **Stage-level metersPerUnit** is currently assumed to be 1.0
+   (meters) in the OpenExec computation. The long-term solution is a
+   stage-level computation via `Stage().Computation<double>` or
+   `GeomMetricsAPI` applied to the stage root prim.
 
-2. **Material spatial properties.** Displacement magnitude, subsurface
-   scattering distances, and volumetric density are not yet covered.
+2. **upAxis Y↔Z rotation** is not yet implemented in the OpenExec
+   computation (it was validated in the earlier Python POC).
 
-3. **Flat hierarchy only.** Nested unit mismatches (e.g., mm asset
-   referenced into a cm stage referenced into a m stage) require
-   chaining corrections through the composition graph. The current
-   implementation detects only the immediate arc boundary.
+3. **Camera, light, and physics attributes** beyond transforms are
+   not yet covered by the Hydra integration but follow the same
+   dimensional analysis pattern via the registry.
 
-4. **No Hydra integration.** The corrected transform is available via
-   OpenExec but not yet consumed by Hydra's scene index. Integration
-   would require either a filtering scene index or Hydra adopting
-   OpenExec as its computation backend.
+4. **Fabric population timing** in Kit requires deferred
+   initialization (`ASSETS_LOADED` + one frame) because Fabric is
+   not guaranteed to be populated at `StageEventType.OPENED` time.
 
-5. **Manual scale authoring.** Without MetricsAPI, the unit scale
-   attribute must be authored by pipeline tooling at reference
-   boundaries. MetricsAPI would make this automatic.
+### Source code
 
-6. **Single schema registration constraint.** OpenExec's one-plugin-per-
-   schema rule means the unit-aware computation must live on a separate
-   API schema, not on `UsdGeomXformable` directly. With community
-   alignment, the computation could be integrated into `execGeom`.
-
-### Conclusion
-
-Evaluation-time unit resolution via OpenExec is feasible, performant, and
-architecturally clean. The primary blocker is not the computation framework
-itself, but the availability of prim-level unit metadata — precisely the
-infrastructure that MetricsAPI
-([PR #45](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/45))
-proposes to provide. This exploration validates both the technical approach
-described in the proposal and the dependency on MetricsAPI as a prerequisite.
-
-The POC source code — including a Python implementation with 36 tests and a
-C++ OpenExec plugin — is available on the
-[`jjebens/units-aware-value-resolution`](https://github.com/jensjebens/OpenUSD/tree/jjebens/units-aware-value-resolution)
-branch of the OpenUSD fork.
+| Component | Branch | Path |
+|---|---|---|
+| MetricsAPI schemas | `jjebens/metrics-api-core` | `extras/usd/metricsApiCore/` |
+| OpenExec computation | `feature/exec-hydra-scene-filter` | `extras/exec/examples/metricsUnits/` |
+| HdExec scene index | `feature/exec-hydra-scene-filter` | `pxr/imaging/hdExec/` |
+| Demo scenes + renders | `feature/exec-hydra-scene-filter` | `extras/exec/examples/unitsDemo/` |
+| Kit extension (Warp) | workspace | `kit-investigation/omni.units.resolution/` |
+| PR #1 | `feature/exec-hydra-scene-filter` → `dev` | [jensjebens/OpenUSD#1](https://github.com/jensjebens/OpenUSD/pull/1) |
