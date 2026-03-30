@@ -1029,14 +1029,20 @@ reference boundaries.
 
 ### Scope
 
-The implementation covers ~950 lines of library code, ~2,000 lines of
-tests (133 tests across 6 programmatic test stages), and a dimensional
-registry of 26 entries spanning transforms, camera, lights, physics,
-and PointInstancer attributes. Built against OpenUSD 26.3.
+The implementation covers ~1,100 lines of library code (including
+`bake_to_units`), ~2,000 lines of tests (133 tests across 6
+programmatic test stages), and a dimensional registry of 26 entries
+spanning transforms, camera, lights, physics, and PointInstancer
+attributes. Built against OpenUSD 26.3.
 
 The POC has been validated inside **Omniverse Kit 110** as a Kit
 extension (`omni.units_api`) with 35 passing headless tests covering
-all six attribute domains. The Kit integration is available at
+all six attribute domains plus `bake_to_units` end-to-end scenarios.
+The Kit integration also includes a **Units Inspector window** (showing
+effective metrics, unit-bearing attribute conversions, and
+audit/correct/bake actions) and **Blender-style unit annotations** in
+the property panel — inline SI-converted values next to authored
+numbers. The Kit integration is available at
 [`jensjebens/omni-units-api`](https://github.com/jensjebens/omni-units-api).
 
 In addition to the per-attribute lens and assembly correction, the POC
@@ -1057,6 +1063,20 @@ with Python bindings. The Python POC is a portable implementation for
 environments without the C++ core; the C++ core serves OpenExec and
 Hydra consumers. Both share symmetric tests to ensure the
 implementations remain equivalent.
+
+### Branch architecture
+
+```
+release (v26.03)
+  └── jjebens/metrics-api-core           ← C++ schemas + dimensional registry + Python bindings
+        ├── jjebens/units-api-poc        ← Python Units API (UnitsLens, MetricsAssembler, bake_to_units)
+        └── jjebens/units-aware-value-resolution  ← OpenExec + Hydra (Appendix D)
+```
+
+The Kit extension ([`jensjebens/omni-units-api`](https://github.com/jensjebens/omni-units-api))
+vendors the Python POC and adds Kit-specific UI (Units Inspector window,
+property widget annotations). It runs against stock USD (no fork
+required).
 
 ## Appendix D: Evaluation-Time Unit Resolution — OpenExec and Hydra Integration
 
@@ -1256,4 +1276,5 @@ remains the established approach for compatibility with all consumers.
 | HdExec scene index | `feature/exec-hydra-scene-filter` | `pxr/imaging/hdExec/` |
 | Demo scenes + renders | `feature/exec-hydra-scene-filter` | `extras/exec/examples/unitsDemo/` |
 | Kit extension (Warp) | workspace | `kit-investigation/omni.units.resolution/` |
+| Kit extension (Python API) | [`jensjebens/omni-units-api`](https://github.com/jensjebens/omni-units-api) | `source/extensions/omni.units_api/` |
 | PR #1 | `feature/exec-hydra-scene-filter` → `dev` | [jensjebens/OpenUSD#1](https://github.com/jensjebens/OpenUSD/pull/1) |
