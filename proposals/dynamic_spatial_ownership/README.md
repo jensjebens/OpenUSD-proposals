@@ -34,6 +34,7 @@ Jens Jebens, Aaron Luk
 - [Relationship to other proposals](#relationship-to-other-proposals)
 - [Next steps](#next-steps)
 - [Appendix A: AI-Assisted Drafting](#appendix-a-ai-assisted-drafting)
+- [Appendix B: POC Evidence](#appendix-b-poc-evidence)
 
 ## Introduction
 
@@ -476,15 +477,21 @@ and design principles before committing to a specific mechanism.
    - **Constraint-based attachment.** Non-hierarchical spatial
      constraints that participate in transform evaluation and can be
      time-varying. Could be implemented as an extension schema.
-   - **Computation-driven attachment (OpenExec).** Define a schema with
-     a "currentCarrier" relationship; register an OpenExec computation
-     that resolves the object's effective transform from the carrier's
-     transform plus a local offset. Objects stay in a fixed namespace
-     position; their computed transforms follow their carriers. Requires
-     a time-varying mechanism for the ownership pointer (USD
-     relationships are not time-sampled) and an event-to-authoring
-     bridge for simulation handoffs. Uses infrastructure that ships
-     with OpenUSD today.
+   - **Computation-driven attachment (OpenExec).** Define an applied API
+     schema with a multi-target `carriers` relationship (static, all
+     potential carriers pre-authored) and a time-sampled
+     `activeCarrierIndex` integer that selects the active carrier per
+     frame. An OpenExec computation resolves the object's effective
+     transform as `localOffset * carrierWorldTransform`. Objects stay
+     at fixed namespace positions; their computed transforms follow
+     their carriers. Only attribute values change during evaluation --
+     relationship targets are static -- so OpenExec handles carrier
+     switching as normal cache invalidation without recompilation. A
+     POC implementation has validated this approach at 10,000 objects,
+     demonstrating 8x file size reduction vs. baked transforms and
+     sub-millisecond per-frame evaluation via Hydra scene index
+     integration. Uses infrastructure that ships with OpenUSD today.
+     See [Appendix B](#appendix-b-poc-evidence) for measured results.
 
 4. **What level of per-instance identity do vectorized representations
    need?** Point instancers are the most scalable existing
@@ -517,7 +524,10 @@ and design principles before committing to a specific mechanism.
 | Physics joints        | Yes       | Low    | Yes      | Yes     | High      |
 | Time-varying parents  | Yes       | High   | Yes      | Yes     | Low (new) |
 | Constraint attachment | Partial   | Medium | Yes      | Partial | Low (new) |
-| Computation-driven   | Partial   | High   | Yes      | Partial | Medium    |
+| Computation-driven¹  | Partial   | High   | Yes      | Partial² | Medium    |
+
+¹ Validated by POC at 10K objects. See [Appendix B](#appendix-b-poc-evidence).
+² Physics integration via `ownershipMode` transform mutex and `TransformProvider` callback; characterized but not fully implemented in the POC.
 
 No existing approach scores "Yes" across all columns. The approaches
 that do require infrastructure that does not yet exist in any major scene
@@ -577,20 +587,45 @@ ecosystem:
   framework (shipping with OpenUSD since v25.08) is directly relevant,
   not as a long-horizon dependency but as existing infrastructure.
   OpenExec's `Relationship()` object accessor can follow a USD
-  relationship to source a computation from another prim. If a
-  "currentCarrier" relationship existed on a transported object, an
-  OpenExec computation could resolve the object's effective transform
-  from the carrier's transform plus a local offset -- without hierarchy.
-  This is architecturally the DES "mutable ownership pointer" pattern
-  expressed as a USD computation, with automatic caching and
-  invalidation. However, OpenExec cannot modify stage topology
-  (no reparenting), USD relationships are not time-sampled (the
-  ownership pointer cannot vary with time without authoring changes),
-  and the framework is value-driven, not event-driven (simulation
-  handoffs require an explicit authoring step). These limitations
-  define what the scene description layer still needs to provide:
-  a time-varying mechanism for the ownership pointer and an
-  event-to-authoring bridge for simulation-driven handoffs.
+  relationship to source a computation from another prim. A POC
+  implementation (`DsoDynamicOwnershipAPI`) uses a multi-target
+  `carriers` relationship with a time-sampled `activeCarrierIndex`
+  integer to select the active carrier per frame. An OpenExec
+  computation resolves the object's effective world transform as
+  `localOffset * carrierWorldTransform` -- architecturally the DES
+  "mutable ownership pointer" pattern expressed as a USD computation,
+  with automatic caching and invalidation.
+
+  The original design used a single-target `currentCarrier`
+  relationship changed at runtime, but this triggers OpenExec structural
+  edits (recompilation) and does not scale. The revised design keeps
+  relationship targets static and varies only attribute values
+  (`activeCarrierIndex`, `localOffset`), which OpenExec handles as
+  normal cache invalidation. This distinction -- static relationships
+  with time-sampled selection -- is a key finding from the POC.
+
+  An `ownershipMode` token (`"carrier"` / `"physics"` / `"authored"`)
+  serves as a transform authority mutex: exactly one system owns each
+  prim's transform at any time. The handoff between computation-driven
+  and physics-driven ownership has been characterized, with the
+  `TransformProvider` callback pattern enabling physics engines to
+  inject transforms directly into the Hydra rendering pipeline.
+
+  The computation integrates with Hydra 2.0 through
+  `HdExecComputedTransformSceneIndex`, a generic scene index filter
+  shared with sibling OpenExec projects (units resolution, physics
+  integration). This demonstrates that computation-driven attachment
+  is composable with other OpenExec computations in the same rendering
+  pipeline.
+
+  A second implementation layer targets Omniverse Kit, writing
+  computed transforms directly to Fabric via USDRT. This validates
+  that the schema design works across both OpenUSD-native (C++/Hydra)
+  and runtime-native (Python/Fabric) execution paths.
+
+  See [Appendix B](#appendix-b-poc-evidence) for measured results
+  and the [DSO POC repository](https://github.com/jensjebens/DSO_POC)
+  for the full implementation.
 
 - **[PointInstancer Object Model](../pointinstancer-object-model/README.md)**
   -- Proposals to extend point instancer capabilities (per-instance
@@ -619,11 +654,15 @@ ecosystem:
    prerequisite analysis. The AECO Interest Group is a natural starting
    point for this work.
 
-4. **Prototype and measure.** Where competing approaches exist
-   (scene-description-level vs. runtime-level, time-varying hierarchy vs.
-   constraint-based attachment), both should be implemented on
-   representative workloads and measured before committing. Performance
-   data resolves debates that opinions cannot.
+4. **Review POC evidence.** The computation-driven attachment approach
+   has been prototyped and measured at representative scale (see
+   [Appendix B](#appendix-b-poc-evidence)). The POC validates that
+   dynamic ownership can be expressed within USD's existing composition
+   and caching guarantees using OpenExec, without hierarchy changes.
+   Community review of the schema design, scale results, and identified
+   limitations will determine whether this approach warrants
+   standardization or whether alternative approaches should be
+   prototyped for comparison.
 
 5. **Document workarounds.** Every production team that has shipped a
    digital twin with dynamic ownership has invented a workaround. A
@@ -745,3 +784,121 @@ decisions included:
 
 A prompt-level drafting log for the problem space documents has been
 archived separately.
+
+## Appendix B: POC Evidence
+
+A proof-of-concept implementation of computation-driven dynamic spatial
+ownership has been built and measured. The full implementation is
+available at [github.com/jensjebens/DSO_POC](https://github.com/jensjebens/DSO_POC).
+The OpenExec computation and Hydra integration are on
+[github.com/jensjebens/OpenUSD](https://github.com/jensjebens/OpenUSD),
+branch `feature/dso-openexec`.
+
+### Schema: DsoDynamicOwnershipAPI
+
+A codeless applied API schema (`skipCodeGeneration=true`):
+
+```usda
+class "DynamicOwnershipAPI" (
+    inherits = </APISchemaBase>
+    customData = { token apiSchemaType = "singleApply" }
+)
+{
+    rel dynamicOwnership:carriers           # all potential carriers, pre-authored
+    int dynamicOwnership:activeCarrierIndex # time-sampled, selects active carrier
+    matrix4d dynamicOwnership:localOffset   # time-sampled, keyframed at switch points
+    token dynamicOwnership:ownershipMode    # "carrier" | "physics" | "authored"
+}
+```
+
+**Key design decision: static relationships, time-sampled selection.**
+The original design used a single-target `currentCarrier` relationship
+changed at runtime. This triggers OpenExec structural edits
+(recompilation) and does not scale. The revised design pre-authors all
+potential carriers and selects via a time-sampled integer index. Only
+attribute values change during evaluation; relationship targets are
+static. OpenExec handles this as normal cache invalidation.
+
+### Measured results
+
+| Metric | DSO | Baked world-space | Visibility toggle |
+|---|---|---|---|
+| File size @ 1K objects | 1.2 MB | 9.6 MB | 13.4 MB |
+| File size @ 10K objects | 12 MB | 98 MB | 134 MB |
+| Size ratio vs. baked | **8x smaller** | baseline | 1.4x larger |
+| Stage open time @ 10K | 0.49 s | — | — |
+| C++ scene index eval @ 1K | 0.13 ms/frame | — | — |
+| C++ scene index eval @ 10K | 1.0 ms/frame | — | — |
+
+DSO file size scales as O(N × H) where H is the number of handoff
+events, not O(N × F) where F is the number of frames. This is because
+`activeCarrierIndex` and `localOffset` are only keyframed at handoff
+boundaries, not every frame.
+
+With PointInstancer (per-instance DSO via scene index filter):
+
+| Metric | DSO instancer | Baked instancer |
+|---|---|---|
+| File size @ 10K instances | 804 KB | 42.7 MB |
+| Size ratio | **53x smaller** | baseline |
+| C++ eval @ 10K instances | 1.0 ms/frame | — |
+
+### Acceptance criteria met
+
+| # | Requirement | Status |
+|---|---|---|
+| 1 | Schema exists and loads | ✅ |
+| 2 | Transform follows carrier (1e-6 precision) | ✅ |
+| 3 | Stable namespace (no reparenting) | ✅ |
+| 4 | Animated carrier switching (no recompilation) | ✅ |
+| 5 | Handoff continuity (1e-6 precision) | ✅ |
+| 6 | Nested carriers (Part → Pallet → AGV) | ✅ |
+| 7 | Scale: 1,000 objects | ✅ |
+| 8 | Scale: 10,000 objects | ✅ |
+
+### Implementation layers
+
+Two implementation paths validate the schema design:
+
+**OpenUSD layer (C++):**
+- OpenExec computation (`computeEffectiveWorldTransform`) registered on
+  `DsoDynamicOwnershipAPI` via `EXEC_REGISTER_COMPUTATIONS_FOR_SCHEMA`
+- Hydra scene index filter (`HdExecComputedTransformSceneIndex`) shared
+  with Units Resolution and Newton Physics OpenExec projects
+- `TransformProvider` callback for physics engine integration
+
+**Omniverse Kit layer (Python):**
+- Kit extension (`omni.dso.core`) writing directly to Fabric via USDRT
+- `DsoCompute` engine with numpy-vectorized and Warp GPU paths
+- Pre-physics callback for correct ordering with PhysX
+- `ownershipMode` as transform authority mutex (carrier/physics/authored)
+- Live stage change reactivity via `SchemaChangeWatcher`
+
+### Key findings
+
+1. **Static relationships + time-sampled index works.** This avoids
+   OpenExec recompilation on carrier switch and is the recommended
+   pattern for any schema that needs time-varying cross-prim references.
+
+2. **Shared Hydra infrastructure.** The generic
+   `HdExecComputedTransformSceneIndex` serves DSO, units resolution, and
+   physics simulation through one filter instance. Per-schema
+   `resetXformStack` metadata in `plugInfo.json` handles the local-space
+   vs. world-space distinction.
+
+3. **Fabric write-back requires type conversion.** `usdrt.Usd.Attribute.Set()`
+   silently ignores `pxr.Gf.Matrix4d`; must construct `usdrt.Gf.Matrix4d`
+   from 16 explicit floats.
+
+4. **USDRT prim discovery is not available at stage-open time.** Fabric
+   population occurs asynchronously after `StageEventType.OPENED`.
+   Extensions must defer discovery or fall back to USD traversal.
+
+5. **Nested carrier chains require dependency-ordered compute.** Flat
+   computation reads carrier transforms from the USD stage, missing
+   intermediate DSO-computed transforms. Topological sort by carrier
+   dependencies resolves this.
+
+6. **Physics handoff is an ownership-mode transition, not a structural
+   edit.** The `ownershipMode` token determines which system writes the
+   transform. The handoff is a value change, not a hierarchy change.
