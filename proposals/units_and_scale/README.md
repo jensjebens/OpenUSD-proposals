@@ -1258,23 +1258,12 @@ remains the established approach for compatibility with all consumers.
    with exec computations are evaluated sequentially via
    `HdExecComputedTransformSceneIndex`. See
    [jensjebens/OpenUSD#4](https://github.com/jensjebens/OpenUSD/issues/4)
-   for details and reproduction steps. metersPerUnit correction works
+   for details and reproduction steps. `metersPerUnit` correction works
    end-to-end.
 
-2. **Inherited attribute semantics** — `GeomMetricsAPI` uses sentinel
-   defaults (`metersPerUnit = 0`, `upAxis = "inherited"`) following the
-   same pattern as `UsdGeomImageable::visibility`. Effective values are
-   resolved via self-referencing `NamespaceAncestor` computations
-   (`computeEffectiveMetersPerUnit`), matching `execGeom`'s
-   `computeLocalToWorldTransform` architecture.
-
-3. **Camera, light, and physics attributes** beyond transforms are
+2. **Camera, light, and physics attributes** beyond transforms are
    not yet covered by the Hydra integration but follow the same
-   dimensional analysis pattern via the registry.
-
-4. **Fabric population timing** in Kit requires deferred
-   initialization (`ASSETS_LOADED` + one frame) because Fabric is
-   not guaranteed to be populated at `StageEventType.OPENED` time.
+   dimensional analysis pattern via the `DimensionalRegistry`.
 
 ### Source code
 
