@@ -195,7 +195,6 @@ composition semantics, or serialization strategies. They are solved by
 UI code.
 
 The hard problems are all in the serialized and working unit layers.
-Display units are trivial and are not discussed further.
 
 ### Why software alone cannot standardize units
 
@@ -204,7 +203,7 @@ conversion is exact -- but because three interrelated gaps reinforce
 each other, preventing any single intervention from resolving the
 problem.
 
-**No one has agreed on canonical units.**
+**No one has agreed on the units pipeline.**
 Before any conversion tool can do the right thing, someone must decide
 what the right thing *is*: what the canonical units are, who is
 responsible for conformance, and where the cost is paid. These are
@@ -223,11 +222,10 @@ what it cannot identify; the information needed for correct conversion
 is not in the data.
 
 **Composition has no unit boundaries.**
-Aggregation systems that preserve authored numbers exactly -- rather
-than normalizing on import -- typically lack three structural
+USD is missing three structural
 prerequisites for reliable unit reconciliation:
 
-- Schemas do not declare which attributes are unit-bearing or what
+- Many schemas do not declare which attributes are unit-bearing or what
   their unit dimensions are.
 - Composition has no concept of a unit boundary at reference or
   aggregation points.
@@ -446,14 +444,7 @@ exhaustive domain-specific rules for every AECO attribute type.
 
 ### Robotics and simulation
 
-Robotics simulation imposes the strictest requirements on unit
-consistency:
 
-- Physics engines require that gravity, mass, inertia, joint limits,
-  and collision geometry all be expressed in consistent units.
-  A 100x error in `metersPerUnit` produces a gravity constant that
-  is 100x too strong or too weak, making simulation results
-  physically meaningless.
 - Robot descriptions (URDF, MJCF) typically use meters. Environments
   built from CAD data may use millimeters or centimeters. Assembling
   a robot into an environment without unit reconciliation produces
@@ -539,8 +530,9 @@ that consensus.
 
 6. **Ecosystem agreement first.** The most impactful intervention
    requires no software changes: agreeing on canonical unit
-   conventions. Conformant content eliminates the units problem
-   entirely. Non-conformant content is explicitly identified and
+   conventions -- possibly per Industry Vertical. Conformant content
+   eliminates the units problem entirely.
+   Non-conformant content is explicitly identified and
    handled by whichever correction mechanism the pipeline employs.
    Software infrastructure should support and enforce the conventions
    the ecosystem agrees upon, not substitute for the agreement itself.
@@ -850,7 +842,7 @@ conclusion. That means you.
 
 ## Appendix A: What conversion does not cover
 
-Even when unit conversion is applied correctly at a composition
+Even when scale unit conversion is applied correctly at a composition
 boundary, two categories of problems persist that routinely catch
 practitioners off guard.
 
@@ -863,11 +855,7 @@ originally encoded in centimeters (with a 0.01 corrective scale above
 it) gets 1 m of world-space motion. The same `translate = 100` under an
 asset encoded in meters produces 100 m of world-space motion.
 
-This is not a bug -- it is a direct consequence of non-destructive
-correction. But it means that identical authored values produce
-different world-space results depending on which asset hierarchy they
-live in. Animation curves, measurement tools, and property panels all
-inherit this heterogeneity. Authors must inspect the transform stack to
+Authors must inspect the transform stack to
 predict the world-space effect of any edit.
 
 This is arguably the hardest UX problem in the entire units story,
@@ -891,12 +879,11 @@ involve powers of length, mass, or time:
 Most conversion tools handle transforms only. Uncovered domains
 produce silently wrong simulation, rendering, or measurement results.
 
-The root cause is structural: most data schemas do not declare which
+Most data schemas do not declare which
 attributes are unit-bearing or what their unit dimensions are. Without
 that annotation, conversion tools must maintain out-of-band rule
 tables mapping attribute names to unit exponents -- tables that are
-always incomplete and drift out of sync as schemas evolve. There is no
-finite set that "completes" the conversion.
+always incomplete and drift out of sync as schemas evolve.
 
 ## Appendix B: AI-Assisted Drafting
 
@@ -1211,7 +1198,7 @@ Source:
    schema domain contributes its own entries; third-party schemas
    register via their own `plugInfo.json`.
 
-5. **Performance overhead is negligible.** At 10,000 prims, unit-aware
+5. **Performance overhead seems manageable.** At 10,000 prims, unit-aware
    computation adds 0–5% overhead compared to the standard transform
    computation.
 
