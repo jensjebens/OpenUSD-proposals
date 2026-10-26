@@ -1,6 +1,6 @@
 # Texture Coordinates for UsdSolid B-reps
 
-Copyright &copy; 2026, NVIDIA Corporation, version 0.1 (DRAFT)
+Copyright &copy; 2026, NVIDIA Corporation, version 0.2 (DRAFT)
 
 Jens Jebens
 
@@ -8,6 +8,9 @@ Jens Jebens
 
 - [Summary](#summary)
 - [Problem statement](#problem-statement)
+  - [Surface parameters as texture coordinates](#surface-parameters-as-texture-coordinates)
+  - [Use cases](#use-cases)
+  - [Texture coordinates on derived meshes](#texture-coordinates-on-derived-meshes)
 - [Proposed schema: BrepTexCoordAPI](#proposed-schema-breptexcoordapi)
 - [Evaluation rules](#evaluation-rules)
 - [Example](#example)
@@ -22,7 +25,9 @@ Jens Jebens
 
 ## Summary
 
-This proposal adds texture coordinates to the UsdSolid B-rep schema proposed in [OpenUSD-proposals #109, *Solid Models in USD*](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/109). Each texture coordinate set is a map, authored per face, from the face's surface parameters (u, v) to texture coordinates (s, t). Any tessellation of the B-rep evaluates the map at its vertices and authors the result as a face-varying `texCoord2f[]` primvar. Every tessellation therefore places a texture the same way, whatever its chord height, and the exact B-rep remains the single source of truth for both shape and texture placement.
+UsdSolid can store a part's exact shape, but not how a texture is placed on it. In a UsdSolid pipeline today, texture coordinates exist only on the meshes a consumer derives from the B-rep. They are lost whenever a mesh is regenerated, and whether and how a tessellator creates them is left to each implementation.
+
+This proposal adds texture coordinates to the UsdSolid B-rep schema proposed in [OpenUSD-proposals #109, *Solid Models in USD*](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/109). Each texture coordinate set is a map, authored per face, from the face's surface parameters (u, v) to texture coordinates (s, t). The surface parameters are the map's input. The map adds the scale, origin, direction and layout they lack, and s = u, t = v remains one valid map. Any tessellation of the B-rep evaluates the map at its vertices and authors the result as a face-varying `texCoord2f[]` primvar, because a triangle mesh has no parameterisation of its own. Every tessellation therefore places a texture the same way, whatever its chord height, and the exact B-rep remains the single source of truth for both shape and texture placement.
 
 The extension is one multiple-apply API schema, `BrepTexCoordAPI`, with two map types:
 
@@ -31,18 +36,34 @@ The extension is one multiple-apply API schema, `BrepTexCoordAPI`, with two map 
 
 ## Problem statement
 
-A B-rep face is a trimmed region of a surface S(u, v), and every point on the face has surface parameters. The UsdSolid schema records the parameter domain of each face (`face:range`) and its trim curves (`BrepCurveUvNurbAPI`), but defines no texture coordinates. A textured material bound to a `UsdSolidBrepArray`, directly or through a `GeomSubset`, therefore has no coordinates to read unless the tessellator invents them, and two tessellators that do so can place the same texture differently.
+A B-rep face is a trimmed region of a surface S(u, v), and every point on the face has surface parameters. The UsdSolid schema records the parameter domain of each face (`face:range`) and its trim curves (`BrepCurveUvNurbAPI`). The parameters give every face a coordinate system, which is what trimming and evaluation need. They do not give a part a texture layout, and the schema defines no texture coordinates beyond them.
 
-Surface parameters cannot serve as `st` directly:
+### Surface parameters as texture coordinates
 
-- A NURBS surface's parameters are knot values with no physical unit, and they are not proportional to arc length, so equal parameter steps cover unequal distances on the surface.
-- The analytic surface types planned in the UsdSolid proposal's geometry type extensions mix units. A plane's parameters are lengths; a cylinder's are an angle in radians and an axial length.
-- The direction of u on each face depends on how the face was modelled.
+Take the roller from the [example](#example): a millimetre stage, a cylindrical side of radius 35 mm and length 70 mm, and two flat end caps. Used directly as `st`, its surface parameters place a texture as follows:
 
-A texture coordinate set therefore needs a map per face from (u, v) to (s, t). Two workflows depend on it:
+- **Side.** u is an angle from 0 to 2π radians and v a height from 0 to 70 mm. A texture that repeats once per unit of `st` repeats 6.3 times around the roller and 70 times along it, so each repeat is 35 mm wide and 1 mm tall.
+- **Caps.** u and v are millimetres from each plane's origin, so the same texture repeats every millimetre, in a direction set by each plane's reference direction.
 
-- **Texture placement that survives re-tessellation.** A consumer derives display meshes from a B-rep at whatever fidelity it needs, and the UsdSolid proposal lists relating a B-rep to its tessellated derivatives as an open question. `st` authored on a derived mesh is lost when the mesh is regenerated, and each level of detail (LOD) needs its own unwrap or transfer.
-- **Meshes rebuilt as B-reps.** A textured mesh, such as a SimReady asset, rebuilt as a native B-rep loses its authored UV layout. A per-face map fitted to the source mesh's `st` keeps that layout at every LOD tessellated from the B-rep.
+One material therefore shows two unrelated scales on a single part. Stored as NURBS, as the UsdSolid proposal currently requires, the same side has knot parameters that are not proportional to its angle, over ranges the exporter chose, so the placement changes again with the representation. In general:
+
+- Each face has its own parameter domain, so texture continuity stops at every face boundary, including the tangent edges between a fillet and the faces it blends.
+- The units, origin and direction of the parameters follow from how a face was modelled and exported.
+- NURBS parameters are knot values with no physical unit, and they are not proportional to arc length.
+
+CAD applications that offer surface-parameter mapping store the mapping as a transform of the parameters; Rhino's file format, for example, stores a linear transform. UsdSolid has no place to store such a transform.
+
+### Use cases
+
+Three workflows need a texture layout stored on the B-rep:
+
+- **Physically scaled materials on CAD parts.** Digital twins and product visualisation bind tiling, physically based materials, such as wood, brushed metal or knurled rubber, whose textures are authored for a real-world repeat length. The texture has to keep one scale and direction across every face of a part, whichever CAD system and representation produced it.
+- **Textured meshes rebuilt as B-reps.** A textured mesh, such as a SimReady asset with labels, decals or baked detail, can be rebuilt as a native B-rep and tessellated at several levels of detail (LOD). The rebuilt faces' parameters bear no relation to the asset's UV layout, so its textures fit no LOD unless the layout is carried onto the B-rep.
+- **CAD texture mappings in USD.** A CAD surface mapping or decal applied to a face has no representation in UsdSolid. It can only survive as per-vertex coordinates on one tessellation, which is also the only form STEP AP242 and JT support.
+
+### Texture coordinates on derived meshes
+
+Renderers draw meshes, so texture coordinates become per-vertex primvars at tessellation in every case, even when they are the surface parameters themselves. USD's own NURBS work the same way: `UsdGeomNurbsPatch` takes texture coordinates as primvars, and USD defines no default texture coordinates from a patch's parameterisation (see [Alternatives considered](#alternatives-considered)). The UsdSolid proposal lists relating a B-rep to its tessellated derivatives as an open question. Without a rule on the B-rep, whether and how a tessellator authors `st` is left to each implementation, and coordinates authored on a derived mesh are lost when the mesh is regenerated. This proposal puts the rule on the B-rep and the result on the mesh.
 
 ## Proposed schema: BrepTexCoordAPI
 
@@ -108,6 +129,8 @@ A consumer that tessellates a `UsdSolidBrepArray` with `BrepTexCoordAPI:<name>` 
 4. Evaluates the map in the parameterisation that `face:range` and `BrepCurveUvNurbAPI` use: the knot domain for NURBS surfaces, and for the analytic surface types the PRC/STEP parameterisation, with angles in radians and axial height for cones. A kernel that tessellates in another parameterisation converts each vertex's parameters before evaluating, as it already does for `face:range`.
 5. Authors the primvar as indexed when any face has `mapType` `none`, and points the corners of those faces at the primvar's `unauthoredValuesIndex`.
 
+A tessellation of a `UsdSolidBrepArray` without `BrepTexCoordAPI` authors no texture coordinates. Open question 4 asks whether it should author the surface parameters instead.
+
 Material binding is unchanged. Per-face and per-Brep materials bind through `GeomSubset` as the UsdSolid proposal describes. A texture reader selects the set by primvar name, for example a `UsdPrimvarReader_float2` with `varname = "st"`.
 
 ## Example
@@ -152,6 +175,7 @@ The UsdSolid validation rules gain these checks for each applied instance:
 
 ## Alternatives considered
 
+- **The surface parameters as built-in texture coordinates.** USD defines no default texture coordinates for NURBS. `UsdGeomNurbsPatch` takes them as primvars like any other gprim: `primvars:st` with `vertex` interpolation (one value per control point, evaluated with the patch's basis) or `varying` interpolation (four values per patch segment, interpolated bilinearly). Storm draws a NurbsPatch as a Catmull-Clark mesh built from its control points (`HdsiNurbsApproximatingSceneIndex`), without knots, weights or trims, so the knot parameterisation does not reach a shader there. Using a patch's parameters as its default texture coordinates is a RenderMan convention. On a B-rep the parameters also fail as a texture layout, as [Surface parameters as texture coordinates](#surface-parameters-as-texture-coordinates) shows. This proposal keeps them available as the identity map, and open question 4 asks whether they should be the default.
 - **Primvars authored on the `UsdSolidBrepArray` itself.** USD's interpolation modes are defined for meshes, curves and patches, and none of them assigns values over B-rep faces and their parameter domains. The closest, `uniform`, would hold one value per face, which cannot place a texture across it.
 - **`st` on derived display meshes only.** The coordinates are lost whenever a mesh is regenerated, every LOD needs its own transfer, and the B-rep stops being the source of truth for the asset.
 - **Per-control-point `st` on the surface.** `UsdGeomNurbsPatch` evaluates `vertex`-interpolated primvars with the surface's own basis. Analytic surfaces have no control points, though, and the map's resolution would be tied to the surface's.
@@ -169,6 +193,7 @@ The UsdSolid validation rules gain these checks for each applied instance:
 1. Whether instance names should follow a convention such as `st`, `st1`, and so on.
 2. The value type of `bspline` control values: `texCoord2d[]` to match the schema's double precision, or `texCoord2f[]` to match the primvar the tessellation authors.
 3. Whether `none` is needed at all, or every face of an applied instance must have a map.
+4. Whether a tessellation of a face without a map should author the face's surface parameters as `st`, the convention RenderMan uses for its patches, or no texture coordinates, as this draft specifies.
 
 ## Relationship to other proposals
 
