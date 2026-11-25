@@ -38,13 +38,6 @@ Jens Jebens
 
 ## Introduction
 
-Regularly, and with increasing impatience,
-someone asks why USD doesn't "just fix" units.
-Scenes break, assets come in at the wrong scale,
-simulations explode, and it feels like
-the tooling should have solved this by now.
-The frustration is legitimate.
-
 Many systems that aggregate spatial data --
 CAD tools, GIS platforms, game engines --
 reconcile unit differences
