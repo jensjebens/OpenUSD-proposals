@@ -2,41 +2,42 @@
 
 This document is the companion to the problem statement
 [Units and Scale in Composed Scenes](../units_and_scale/README.md). The problem statement
-sets out the motivation and the requirements, and this document presents one technical
-design that meets them.
+describes the motivation and lists the requirements. This document presents one technical
+design that meets those requirements.
 
-The design adopts Pixar's spatial metrics proposal,
+Step 1 of the design is Pixar's spatial metrics proposal,
 [OpenUSD-proposals PR 114](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/114),
-unchanged as step 1. Steps 2 to 4 meet the requirements in the problem statement that
-PR 114 does not address. Step 5 is a suggestion of this draft for values whose source
-uses a different unit from the asset. Each step can be adopted on its own, none of them
-changes an authored value, and each adds a validator for the new errors that it makes
-possible. A working prototype is in [`prototype/`](prototype/).
+unchanged. Steps 2 to 4 meet the requirements in the problem statement that PR 114 leaves
+open. Step 5 is a suggestion of this draft for values that come from a source in a
+different unit from the asset. Each step can be adopted on its own. No step changes an
+authored value, and every step adds a validator for the new errors that become possible
+with that step. A working prototype is in [`prototype/`](prototype/).
 
 This draft has not been reviewed yet.
 
-## Requirements this design addresses
+## Requirements met by this design
 
-The design keeps the following parts of PR 114, at head 6266c1e:
+The following parts of PR 114, at head 6266c1e, are unchanged in this design:
 
-- A prim declares its length unit and up axis by applying a schema,
-  `UsdSpatialMetricsAPI`. A prim without the schema uses the values of its nearest
-  ancestor that has the schema applied.
+- An author declares the length unit and up axis of a prim by applying a schema,
+  `UsdSpatialMetricsAPI`, to the prim. A prim without the schema takes the values from
+  the nearest ancestor that has the schema applied.
 - When an asset is referenced into a stage with different units, a tool corrects the
   difference by authoring named transform ops on the referencing prim. A flag marks a
   deliberate difference that needs no correction, and validators report a correction
   that no longer matches the units on either side of the reference.
-- OpenUSD does not convert geometry at evaluation time. PR 114 considered computing the
-  correction in OpenExec and did not pursue it, for two reasons. A computed correction
+- OpenUSD does not convert geometry at evaluation time. The authors of PR 114 considered
+  computing the correction in OpenExec and did not pursue that approach, for two
+  reasons. A computed correction
   applies only to transforms, so it cannot correct attributes such as gravity. An
   authored correction can be inspected and validated, and it also works for clients
   that do not run OpenExec.
-- PR 114 defers mass to future work, in a separate schema, `UsdPhysicsMetricsAPI`.
+- PR 114 lists mass as future work, for a separate schema, `UsdPhysicsMetricsAPI`.
 
-The design also meets the following requirements in the problem statement, which PR 114
-does not address:
+PR 114 leaves the following requirements from the problem statement open. This design
+meets them:
 
-- The design covers all seven SI base units (principle 9).
+- The design declares all seven SI base units (principle 9).
 - One schema, shared by every domain, declares the unit system. Without it, a base unit
   that several domains use, such as temperature, would be declared in the schema of one
   domain and used from the others (point 6 under "Why this matters now").
@@ -51,33 +52,35 @@ does not address:
 
 The first choice is between a separate unit schema for each domain and one unit schema
 shared by all domains. PR 114 lists a per-domain `UsdPhysicsMetricsAPI` as future work.
-Step 4 proposes instead one schema for the six base units other than length. Physics,
+In step 4, one schema instead declares the six base units other than length. Physics,
 thermal and electrical schemas all use time, mass and temperature, so per-domain schemas
-would either declare those units several times or make the other domains depend on one
-of them. With one schema, a reviewer looks in one place for the unit system of a prim,
+would either declare those units several times or make the other domains depend on the
+schema of one domain. With one schema, a reviewer looks in one place for the unit system of a prim,
 and one inheritance rule and one validator apply.
 
 The second choice is whether an attribute can declare its own unit. Some engineering
 simulation tools give each physics property its own unit, because each value comes from
-a different source. If an attribute's unit overrides the unit system of its subtree,
-one authored value has two possible interpretations, which conflicts with principle 8
-of the problem statement. Step 5 suggests a way to keep a record of the source value and
-its unit without giving the attribute a unit of its own.
+a different source. If an attribute could declare a unit that overrides the unit
+system of the prim, the authored value would have two possible interpretations. Two
+interpretations conflict with principle 8 of the problem statement, under which every
+authored value has exactly one interpretation. Step 5 records the source value and the
+source unit without giving the attribute a unit of its own.
 
 ## The proposal
 
 ### Step 1: PR 114 as written
 
-Step 1 adopts `UsdSpatialMetricsAPI` (`spatial:metersPerUnit`, `spatial:upAxis`) and
+Step 1 consists of `UsdSpatialMetricsAPI` (`spatial:metersPerUnit`, `spatial:upAxis`) and
 `UsdGeomSpatialMetricsXformCompensationAPI`, with the inheritance rule, fallbacks,
-backward compatibility and validators of PR 114. This proposal changes none of them.
+backward compatibility and validators of PR 114. This proposal leaves all of them
+unchanged.
 
 ### Step 2: composition rules for units
 
-Step 2 applies the inheritance rule of PR 114 to every composition arc. The rule is
-evaluated on the composed stage. A prim uses its own units if it has the schema applied,
-and otherwise the units of its nearest ancestor that has the schema applied. The table
-below gives the effect of each arc.
+In step 2, the inheritance rule of PR 114 applies to every composition arc. The rule is
+evaluated on the composed stage. A prim that has the schema applied uses its own units.
+Any other prim uses the units of the nearest ancestor that has the schema applied. The
+table below lists the effect of each arc on units.
 
 | Arc | Effect on units | Validator |
 |---|---|---|
@@ -89,17 +92,17 @@ below gives the effect of each arc.
 | Instancing | Instance proxies use the units of the ancestors of the instance | none |
 
 PR 114 validator 2 warns when a referenced prim does not have the schema applied
-directly, because the prim then takes its units from the referencing stage and loses
-the units of its source.
+directly, because the prim then takes the units of the referencing stage and loses the
+units of the source asset.
 
-Two further validators cover errors that are also possible under PR 114:
+Two further validators report errors that can also occur under PR 114:
 
 - **CG-3** reports a units attribute that is not authored on a prim that has the schema
   applied. Such a prim uses its own attribute values (PR 114, "Utility Methods", step 1),
   so an attribute that is not authored takes the fallback value of the schema instead of
-  the value of its ancestor. The PR 114 helper `ApplyAndAuthorUpAxis` produces this case.
+  the value from the prim's ancestor. The PR 114 helper `ApplyAndAuthorUpAxis` produces this case.
   Suppose a robot is authored in metres, and a tool uses the helper on the robot's
-  gripper to set its up axis. The gripper's `spatial:metersPerUnit` then takes the
+  gripper to set the gripper's up axis. The gripper's `spatial:metersPerUnit` then takes the
   fallback of 0.01, so the gripper's lengths are read as centimetres. PR 114 validator 3
   reports a missing compensation, and authoring that compensation would shrink the
   gripper a hundredfold. CG-3 reports the actual cause, which is the attribute that is
@@ -109,15 +112,15 @@ Two further validators cover errors that are also possible under PR 114:
 
 ### Step 3: dimensions declared in schemas
 
-The physical dimension of a quantity expresses it in terms of the base quantities, as a
-product of their powers. Density, for example, has the dimension mass × length⁻³, and
-velocity has the dimension length × time⁻¹. An attribute such as `physics:density` has
-the same dimension in every asset, so its dimension belongs in the schema that defines
-the attribute.
+The physical dimension of a quantity is expressed by multiplying the base quantities
+together, each raised to a specific power. Density, for example, has the dimension
+mass × length⁻³, and velocity has the dimension length × time⁻¹. An attribute such as
+`physics:density` has the same dimension in every asset, so the dimension belongs in the
+schema that defines the attribute.
 
-Step 3 registers one attribute metadata field, `unitDimension`. Its value is a
-dictionary that maps each SI base dimension (`L`, `M`, `T`, `I`, `Theta`, `N`, `J`) to
-its exponent. Base dimensions with an exponent of zero are left out:
+Step 3 registers one attribute metadata field in OpenUSD, `unitDimension`. The value of
+`unitDimension` is a dictionary that maps each SI base dimension (`L`, `M`, `T`, `I`,
+`Theta`, `N`, `J`) to an exponent. Base dimensions with an exponent of zero are left out:
 
 ```usda
 double physics:density = 0 (
@@ -132,7 +135,7 @@ The field has to be registered metadata, because usdGenSchema keeps registered
 metadata fields and drops property `customData`. When usdGenSchema writes
 `generatedSchema.usda`, it clears `customData` on each property (`usdGenSchema.py`,
 `GenerateRegistry`), and it keeps only the first sentence of each doc string, as
-`userDocBrief`. For that reason, the units that UsdPhysics states in its doc strings are
+`userDocBrief`. For that reason, the units stated in the UsdPhysics doc strings are
 missing from the generated schema. A test schema run through usdGenSchema from OpenUSD
 26.8 showed all three behaviours:
 
@@ -148,28 +151,27 @@ metadata authored on the prim.
 This step changes no authored value and no behaviour. A custom attribute has no schema
 definition, so the field can be authored on the attribute directly.
 
-The UsdPhysics schemas already state units for most of their attributes, in their doc
-strings:
+The doc strings of the UsdPhysics schemas already state units for most attributes:
 
 - 25 attributes have a `Units:` clause in their doc strings in `schema.usda`. The
   prototype converts these clauses into a table of dimensions
   (`prototype/tools/extract_physics_dimensions.py`).
 - For 7 of those 25 attributes, the dimension depends on the applied instance.
-  `PhysicsDriveAPI` and `PhysicsLimitAPI` are multiple-apply schemas, and their
-  dimensions differ between linear and angular instances. For example, drive stiffness
+  `PhysicsDriveAPI` and `PhysicsLimitAPI` are multiple-apply schemas, and the dimensions
+  of attributes in these schemas differ between linear and angular instances. For example, drive stiffness
   has the dimension M T⁻² for a linear drive and M L² T⁻² per degree for an angular one.
-  One static field per attribute cannot express that difference, which open question 2
-  raises.
+  A single static value per attribute cannot represent that difference. Open question 2
+  asks how to handle it.
 - Six numeric attributes have no `Units:` clause. Friction, restitution and gravity
   direction are dimensionless, and `physics:localPos0` and `physics:localPos1` are
-  lengths. The field therefore has to be able to declare an attribute dimensionless
-  explicitly, with an empty dictionary (`{}`).
+  lengths. An empty dictionary (`{}`) therefore declares an attribute dimensionless
+  explicitly.
 
 ### Step 4: one unit-system schema for the other six base units
 
-Step 4 adds `UsdUnitSystemAPI` in place of the per-domain `UsdPhysicsMetricsAPI` that
-PR 114 lists as future work. It uses the same inheritance rule as
-`UsdSpatialMetricsAPI`.
+Step 4 is a new schema, `UsdUnitSystemAPI`, which replaces the per-domain
+`UsdPhysicsMetricsAPI` that PR 114 lists as future work. `UsdUnitSystemAPI` follows the
+same inheritance rule as `UsdSpatialMetricsAPI`.
 
 | Attribute | Fallback |
 |---|---|
@@ -181,13 +183,14 @@ PR 114 lists as future work. It uses the same inheritance rule as
 | `units:candelasPerUnit` | 1 |
 
 Length stays in `UsdSpatialMetricsAPI`, together with up axis, because the compensation
-transform uses both. Together, the two schemas cover all seven SI base units.
+transform uses both. Together, the two schemas declare all seven SI base units.
 
 #### Conversion of non-spatial values
 
 Geometry needs a compensation transform in the layer, because a renderer reads points
-with no unit conversion. Physics, thermal and electrical values do not need one, because
-a solver requests them in its own working units. Once each attribute declares its
+with no unit conversion. Physics, thermal and electrical values do not need a
+compensation transform, because each solver requests values in the working units that
+the solver uses. Once each attribute declares its
 dimension (step 3) and the unit system of each prim is resolved (step 4), one utility in
 OpenUSD core can compute the conversion factor for any attribute in double precision
 ([Appendix A](#appendix-a-unit-conversion-in-openusd-core)):
@@ -201,17 +204,17 @@ changes nothing on the stage, in the same way that
 `UsdGeomXformable::ComputeLocalToWorldTransform` computes a matrix. The future-work
 section of PR 114 describes a named multiplier attribute that mass computations
 consume, leaving authored values untouched. The utility generalises that idea from mass
-to every attribute that declares a dimension. It also converts the values that PR 114
-leaves open because no computation in OpenUSD core uses them, such as break force and
-drive stiffness.
+to every attribute that declares a dimension. The utility also converts values such as
+break force and drive stiffness. PR 114 leaves these values open, because OpenUSD core
+has no computation that uses break force or drive stiffness.
 
 ### Step 5: values whose source uses another unit (this draft's suggestion)
 
-Some values come from a source that uses a different unit from the asset, for example a
-vendor catalogue, a sensor or an engineering standard. Under step 5, the converter that
+Some values come from a source in a different unit from the asset, for example a vendor
+catalogue, a sensor or an engineering standard. Under step 5, the converter that
 writes the attribute, for example the CAD converter usd-convert-cad, converts the value
 once into the unit system of the prim. The converter also records the source value and
-its unit in the custom data of the attribute:
+the source unit in the custom data of the attribute:
 
 ```usda
 float physics:density = 7850 (
@@ -232,24 +235,24 @@ and leaves the record unchanged. The offset allows source data in degrees Celsiu
 Fahrenheit to be authored on the kelvin scale, so the unit system itself needs only
 factors.
 
-Under step 5, no attribute has a unit that overrides the unit system of its subtree, so
+Under step 5, no attribute has a unit that overrides the unit system of the prim, so
 each authored value has one interpretation. Where a group of values is authored in
-another unit system, those values belong on their own prim, with its own
-`UsdUnitSystemAPI`.
+another unit system, those values belong on a separate prim that has `UsdUnitSystemAPI`
+applied with that unit system.
 
 The alternative is a unit on each attribute, authored as metadata, which overrides the
-unit system of the subtree. That approach keeps the source value as authored, needs no
+unit system of the prim. That approach keeps the source value as authored, needs no
 conversion in the converter, and makes the `unitSource` record and CG-5 unnecessary. In
 exchange, a reader has to check two places to interpret every value. Open question 3
 asks which of the two approaches to adopt.
 
 ## Out of scope
 
-- Display units are out of scope, because they belong to applications, as principle 1
-  of the problem statement sets out.
+- Display units are out of scope. Under principle 1 of the problem statement, display
+  units are a concern of applications.
 - Values that are not scalars or arrays are out of scope, for example fields,
-  expressions and time-varying quantities. Such values would build on the dimension
-  field from step 3.
+  expressions and time-varying quantities. A later proposal for such values could use
+  the dimension field from step 3.
 - Values that scale independently of their unit, such as weld stiffness, are out of
   scope.
 - Unit symbols, and a syntax for them, are out of scope. Records such as
@@ -287,10 +290,10 @@ python prototype/scenarios/demo.py
 The compensation op in PR 114 does not need to be changed to double, for three reasons:
 
 - A float keeps about seven significant digits, whatever the unit. Points are stored
-  relative to the origin of their own prim, so their absolute precision depends on how
-  far they extend from that origin.
+  relative to the origin of the prim, so the absolute precision of a point depends on
+  the distance of the point from that origin.
 - UsdGeom stores points as `point3f`. Under PR 114, each referenced asset keeps its
-  points in its own units, the placement translate is `double3`, and USD composes the
+  points in the units of the asset, the placement translate is `double3`, and USD composes the
   local-to-world transform in double (`GfMatrix4d`).
 - PR 114 declares `xformOp:scale:metricsCompensation` as `float3`. The stored factor has
   the same relative precision as the points, so it adds at most about as much error as
@@ -300,13 +303,14 @@ In S9, storing the chip's points as floats shifts them by at most 0.29 nm, which
 than three thousand times smaller than a micrometre. The float compensation factor adds
 at most a further 0.056 nm.
 
-The precision of a mesh depends on how far its points extend from the origin of its
-prim, and not on its unit. A `point3f` mesh with points 100 m from its origin resolves
-positions to steps of about 8 µm. An asset that needs fine precision over a large extent
-therefore has to be split into enough prims, each with its points close to its own
-origin and placed by a double-precision transform. That is already true today, and
-neither PR 114 nor this draft changes it. No real workflow has stated a tolerance yet,
-so open question 4 asks whether some workflows need finer splitting than they use today.
+The precision of a mesh depends on the distance of the points from the origin of the
+prim, and not on the unit of the mesh. A `point3f` mesh with points 100 m from the origin
+resolves positions to steps of about 8 µm. An asset that needs fine precision over a
+large extent therefore has to be split into enough prims. Each prim has points close to
+the origin of that prim, and a double-precision transform places the prim. This
+requirement already applies today, and neither PR 114 nor this draft changes the
+requirement. No tolerance from a real workflow has been stated yet, so open question 4
+asks whether some workflows need finer splitting than they use today.
 
 ## Open questions
 
@@ -360,7 +364,8 @@ Both functions behave as follows:
 - They read the dimension from the `unitDimension` field of the attribute (step 3). If
   the attribute declares no dimension, both functions fail, so a value is never
   converted with a silent factor of 1. An attribute that declares an empty dictionary
-  (`{}`) is dimensionless, and it converts with a factor of 1.
+  (`{}`) is dimensionless, and the value of the attribute is converted with a factor
+  of 1.
 - They take the length unit from `UsdSpatialMetricsAPI` and the other six base units
   from `UsdUnitSystemAPI`, each resolved with the nearest-ancestor rule (steps 1, 2
   and 4).
@@ -376,7 +381,7 @@ precision of the stored value therefore dominates, as `point3f` does for geometr
 question 4 asks which factors must be exact.
 
 The dimensions that depend on the instance (open question 2) have to be settled before
-this API covers `PhysicsDriveAPI` and `PhysicsLimitAPI`.
+this API can convert the attributes of `PhysicsDriveAPI` and `PhysicsLimitAPI`.
 
 The prototype implements the same maths in Python, in double precision
 (`read_in` in `prototype/units_cg/convert.py`).
