@@ -29,7 +29,7 @@ Jens Jebens
   - [Principles](#principles)
   - [Open questions and tradeoffs](#open-questions-and-tradeoffs)
   - [Practice until a design is agreed](#practice-until-a-design-is-agreed)
-  - [Likely direction](#likely-direction)
+  - [Companion design](#companion-design)
   - [Risks](#risks)
 - [Relationship to other proposals](#relationship-to-other-proposals)
 - [Next steps](#next-steps)
@@ -293,10 +293,12 @@ The urgency of the units problem has increased for several reasons:
    Neither proposal is in OpenUSD yet, which still exposes only the
    stage-level `metersPerUnit` and `upAxis` API in `UsdGeom`.
 
-6. **Engineering simulation needs more than length and mass.**
-   Simulation workflows need all seven SI base units, one shared schema
-   for the unit system, composition rules written out for every arc,
-   and precise conversion at very large and very small scales.
+6. **Engineering simulation uses more than length and mass.**
+   Simulation workflows also use time, temperature, electric current
+   and the other SI base units. They raise questions that any units
+   design has to answer: how a unit system is declared for each base
+   unit, how units behave across every composition arc, and how
+   precisely values convert at very large and very small scales.
 
 ## Existing mechanisms in USD
 
@@ -627,14 +629,17 @@ that consensus.
    every composition arc. Two tools that follow the method get the same
    answer, so every authored value has exactly one interpretation.
 
-9. **All seven SI base units.** The design covers length, mass, time,
-   electric current, temperature, amount of substance and luminous
-   intensity, so that no domain has to invent its own unit declaration.
+9. **All seven SI base units (proposed).** The design covers length,
+   mass, time, electric current, temperature, amount of substance and
+   luminous intensity, so that no domain has to invent its own unit
+   declaration. This principle is proposed for discussion and has not
+   been agreed.
 
-10. **Precision is scoped per workflow.** Each workflow states the
-    precision it needs. Where a single prim cannot reach that precision,
-    assets are split into more prims, as with any other geometry, before
-    the format itself is changed.
+10. **Precision is scoped per workflow (proposed).** Each workflow
+    states the precision it needs. Where a single prim cannot reach that
+    precision, assets are split into more prims, as with any other
+    geometry, before the format itself is changed. This principle is
+    proposed for discussion and has not been agreed.
 
 ### Open questions and tradeoffs
 
@@ -812,7 +817,7 @@ extreme scales. But it is implementable today with existing tools,
 and it reduces the problem surface to the cases that genuinely require
 the infrastructure work described above.
 
-### Likely direction
+### Companion design
 
 The companion proposal,
 [Units in OpenUSD: a common starting point](../units_common_ground/README.md),
@@ -1135,5 +1140,5 @@ archived separately.
 
 Version 0.2 was revised with Claude (Anthropic) in Claude Code, under
 the direction of Jens Jebens. It adds requirements from engineering
-simulation, describes Pixar's PR #114, adds the concrete cases and the likely direction, and
+simulation, describes Pixar's PR #114, adds the concrete cases and a section on the companion design, and
 pairs this problem statement with one companion design proposal.
