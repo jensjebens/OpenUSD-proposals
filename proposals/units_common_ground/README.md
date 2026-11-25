@@ -17,16 +17,17 @@ This draft has not been reviewed yet.
 
 ## Requirements met by this design
 
-The following parts of PR 114, at head 6266c1e, are unchanged in this design:
+PR 114 is itself a proposal, and none of it is part of OpenUSD yet. This design keeps
+the following parts of PR 114, at head 6266c1e, unchanged:
 
-- An author declares the length unit and up axis of a prim by applying a schema,
+- Under PR 114, an author declares the length unit and up axis of a prim by applying a schema,
   `UsdSpatialMetricsAPI`, to the prim. A prim without the schema takes the values from
   the nearest ancestor that has the schema applied.
-- When an asset is referenced into a stage with different units, a tool corrects the
-  difference by authoring named transform ops on the referencing prim. A flag marks a
+- Under PR 114, when an asset is referenced into a stage with different units, a tool
+  corrects the difference by authoring named transform ops on the referencing prim. A flag marks a
   deliberate difference that needs no correction, and validators report a correction
   that no longer matches the units on either side of the reference.
-- OpenUSD does not convert geometry at evaluation time. The authors of PR 114 considered
+- Under PR 114, OpenUSD does not convert geometry at evaluation time. The authors of PR 114 considered
   computing the correction in OpenExec and did not pursue that approach, for two
   reasons. A computed correction
   applies only to transforms, so it cannot correct attributes such as gravity. An
@@ -38,7 +39,8 @@ PR 114 leaves the following requirements from the problem statement open. This d
 meets them:
 
 - The design declares all seven SI base units (principle 9).
-- One schema, shared by every domain, declares the unit system. Without it, a base unit
+- This design adds one schema, shared by every domain, that declares the unit system.
+  Without a shared schema, a base unit
   that several domains use, such as temperature, would be declared in the schema of one
   domain and used from the others (point 6 under "Why this matters now").
 - The rules for units are written down for every composition arc before new schemas
@@ -52,7 +54,8 @@ meets them:
 
 The first choice is between a separate unit schema for each domain and one unit schema
 shared by all domains. PR 114 lists a per-domain `UsdPhysicsMetricsAPI` as future work.
-In step 4, one schema instead declares the six base units other than length. Physics,
+Step 4 of this design instead adds one new schema for the six base units other than
+length. Physics,
 thermal and electrical schemas all use time, mass and temperature, so per-domain schemas
 would either declare those units several times or make the other domains depend on the
 schema of one domain. With one schema, a reviewer looks in one place for the unit system of a prim,
@@ -63,22 +66,25 @@ simulation tools give each physics property its own unit, because each value com
 a different source. If an attribute could declare a unit that overrides the unit
 system of the prim, the authored value would have two possible interpretations. Two
 interpretations conflict with principle 8 of the problem statement, under which every
-authored value has exactly one interpretation. Step 5 records the source value and the
-source unit without giving the attribute a unit of its own.
+authored value has exactly one interpretation. This draft suggests a different
+approach in step 5, in which a converter records the source value and the source unit
+without giving the attribute a unit of its own.
 
 ## The proposal
 
 ### Step 1: PR 114 as written
 
-Step 1 consists of `UsdSpatialMetricsAPI` (`spatial:metersPerUnit`, `spatial:upAxis`) and
+Step 1 consists of the two schemas that PR 114 proposes, `UsdSpatialMetricsAPI`
+(`spatial:metersPerUnit`, `spatial:upAxis`) and
 `UsdGeomSpatialMetricsXformCompensationAPI`, with the inheritance rule, fallbacks,
-backward compatibility and validators of PR 114. This proposal leaves all of them
-unchanged.
+backward compatibility and validators that PR 114 proposes for them. Neither schema is
+part of OpenUSD yet. This proposal leaves all of PR 114 unchanged.
 
 ### Step 2: composition rules for units
 
-In step 2, the inheritance rule of PR 114 applies to every composition arc. The rule is
-evaluated on the composed stage. A prim that has the schema applied uses its own units.
+Step 2 of this proposal applies the inheritance rule of PR 114 to every composition arc,
+and adds validators for the arcs that need them. The rule is evaluated on the composed
+stage. A prim that has the schema applied uses its own units.
 Any other prim uses the units of the nearest ancestor that has the schema applied. The
 table below lists the effect of each arc on units.
 
@@ -91,11 +97,12 @@ table below lists the effect of each arc on units.
 | Deactivation | The prim and its subtree are removed from the composed stage, so their units do not matter | none |
 | Instancing | Instance proxies use the units of the ancestors of the instance | none |
 
-PR 114 validator 2 warns when a referenced prim does not have the schema applied
+Validator 2 in PR 114 warns when a referenced prim does not have the schema applied
 directly, because the prim then takes the units of the referencing stage and loses the
 units of the source asset.
 
-Two further validators report errors that can also occur under PR 114:
+This proposal also adds two further validators, which report errors that can also occur
+under PR 114:
 
 - **CG-3** reports a units attribute that is not authored on a prim that has the schema
   applied. Such a prim uses its own attribute values (PR 114, "Utility Methods", step 1),
@@ -118,7 +125,8 @@ mass × length⁻³, and velocity has the dimension length × time⁻¹. An attr
 `physics:density` has the same dimension in every asset, so the dimension belongs in the
 schema that defines the attribute.
 
-Step 3 registers one attribute metadata field in OpenUSD, `unitDimension`. The value of
+Step 3 adds a new attribute metadata field to OpenUSD, `unitDimension`, as a registered
+metadata field. The value of
 `unitDimension` is a dictionary that maps each SI base dimension (`L`, `M`, `T`, `I`,
 `Theta`, `N`, `J`) to an exponent. Base dimensions with an exponent of zero are left out:
 
@@ -136,16 +144,16 @@ metadata fields and drops property `customData`. When usdGenSchema writes
 `generatedSchema.usda`, it clears `customData` on each property (`usdGenSchema.py`,
 `GenerateRegistry`), and it keeps only the first sentence of each doc string, as
 `userDocBrief`. For that reason, the units stated in the UsdPhysics doc strings are
-missing from the generated schema. A test schema run through usdGenSchema from OpenUSD
-26.8 showed all three behaviours:
+missing from the generated schema. The prototype registers `unitDimension` through a plugin. A test schema run through
+usdGenSchema from OpenUSD 26.8 with that plugin showed all three behaviours:
 
 - `unitDimension` came through unchanged.
 - A `customData` entry on the same attribute was dropped.
 - The doc string "Density. Units: mass/distance/distance/distance." became
   `userDocBrief = "Density."`.
 
-At runtime, `UsdAttribute::GetMetadata` in usd-core 26.8 returns the value of the field
-from the schema definition for any prim that has the schema applied, without any
+At runtime, `UsdAttribute::GetMetadata` in usd-core 26.8 returns the value of the
+registered field from the schema definition for any prim that has the schema applied, without any
 metadata authored on the prim.
 
 This step changes no authored value and no behaviour. A custom attribute has no schema
@@ -164,12 +172,12 @@ The doc strings of the UsdPhysics schemas already state units for most attribute
   asks how to handle it.
 - Six numeric attributes have no `Units:` clause. Friction, restitution and gravity
   direction are dimensionless, and `physics:localPos0` and `physics:localPos1` are
-  lengths. An empty dictionary (`{}`) therefore declares an attribute dimensionless
-  explicitly.
+  lengths. In the proposed field, an empty dictionary (`{}`) therefore declares an
+  attribute dimensionless explicitly.
 
 ### Step 4: one unit-system schema for the other six base units
 
-Step 4 is a new schema, `UsdUnitSystemAPI`, which replaces the per-domain
+Step 4 adds a new schema, `UsdUnitSystemAPI`, which replaces the per-domain
 `UsdPhysicsMetricsAPI` that PR 114 lists as future work. `UsdUnitSystemAPI` follows the
 same inheritance rule as `UsdSpatialMetricsAPI`.
 
@@ -190,9 +198,10 @@ transform uses both. Together, the two schemas declare all seven SI base units.
 Geometry needs a compensation transform in the layer, because a renderer reads points
 with no unit conversion. Physics, thermal and electrical values do not need a
 compensation transform, because each solver requests values in the working units that
-the solver uses. Once each attribute declares its
-dimension (step 3) and the unit system of each prim is resolved (step 4), one utility in
-OpenUSD core can compute the conversion factor for any attribute in double precision
+the solver uses. Step 4 therefore also adds a new
+utility to OpenUSD core. Once each attribute declares its dimension (step 3) and the unit
+system of each prim is resolved (step 4), the proposed utility computes the conversion
+factor for any attribute in double precision
 ([Appendix A](#appendix-a-unit-conversion-in-openusd-core)):
 
 ```
@@ -200,7 +209,7 @@ SI value = authored value × Π (factor of base b) ^ (exponent of b)
 ```
 
 The utility never rewrites the authored value. It computes a factor on request and
-changes nothing on the stage, in the same way that
+changes nothing on the stage, in the same way that the existing
 `UsdGeomXformable::ComputeLocalToWorldTransform` computes a matrix. The future-work
 section of PR 114 describes a named multiplier attribute that mass computations
 consume, leaving authored values untouched. The utility generalises that idea from mass
@@ -214,7 +223,7 @@ Some values come from a source in a different unit from the asset, for example a
 catalogue, a sensor or an engineering standard. Under step 5, the converter that
 writes the attribute, for example the CAD converter usd-convert-cad, converts the value
 once into the unit system of the prim. The converter also records the source value and
-the source unit in the custom data of the attribute:
+the source unit in a new `unitSource` dictionary in the custom data of the attribute:
 
 ```usda
 float physics:density = 7850 (
@@ -314,7 +323,7 @@ asks whether some workflows need finer splitting than they use today.
 
 ## Open questions
 
-1. Is a conversion utility in OpenUSD core
+1. Is the proposed conversion utility in OpenUSD core
    ([Appendix A](#appendix-a-unit-conversion-in-openusd-core)) acceptable for
    non-spatial values in place of per-domain compensation schemas, and is its API right?
 2. How should a multiple-apply schema declare dimensions that depend on the instance?
@@ -332,8 +341,8 @@ asks whether some workflows need finer splitting than they use today.
 
 ## Appendix A: unit conversion in OpenUSD core
 
-Step 4 needs one implementation of the conversion maths, maintained in OpenUSD. For
-spatial units, OpenUSD already has one: `ComputeLocalToWorldTransform` composes every
+The conversion that step 4 proposes needs one implementation of the conversion maths,
+maintained in OpenUSD. For spatial units, OpenUSD already has one: `ComputeLocalToWorldTransform` composes every
 transform in double (`GfMatrix4d`), so every consumer gets the same matrix. If each
 consumer wrote its own conversion for mass, time, temperature or current, one consumer
 might compute in float, and another might apply the exponents in a different order. Two
@@ -341,7 +350,8 @@ tools could then read different numbers from the same attribute. The precision o
 conversion could not be checked across independent tools, and principle 8 of the problem
 statement, that every authored value has exactly one interpretation, would not hold.
 
-The API below is a sketch, and the names are illustrative.
+The API below is a sketch of the two proposed functions, and the names are
+illustrative.
 
 ```cpp
 // Factor that converts the authored value of `attr` into the target unit system.
