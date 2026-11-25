@@ -1,0 +1,82 @@
+#usda 1.0
+(
+    "Hand-written stand-in for a usdGenSchema output. Codeless; loaded via PXR_PLUGINPATH_NAME."
+)
+
+# Stand-in for PR 114's UsdSpatialMetricsAPI. Same attribute names, fallbacks and
+# inheritance rule. Kept unchanged on purpose: the common-ground proposal builds on it.
+class "SpatialMetricsAPI" (
+    customData = {
+        token apiSchemaType = "singleApply"
+    }
+)
+{
+    double spatial:metersPerUnit = 0.01 (
+        unitDimension = {
+            int L = 1
+        }
+    )
+    uniform token spatial:upAxis = "Y" (
+        allowedTokens = ["Y", "Z"]
+    )
+}
+
+# Stand-in for PR 114's UsdGeomSpatialMetricsXformCompensationAPI.
+class "SpatialMetricsXformCompensationAPI" (
+    customData = {
+        token apiSchemaType = "singleApply"
+    }
+)
+{
+    uniform bool metricsCompensation:desired = 1
+    float3 xformOp:scale:metricsCompensation = (1, 1, 1)
+    float xformOp:rotateX:metricsCompensation = 0
+}
+
+# Common-ground addition: one domain-neutral schema for the six SI base units that
+# are not length. Replaces the per-domain UsdPhysicsMetricsAPI that PR 114 lists as
+# future work. Same inheritance rule as SpatialMetricsAPI.
+class "UnitSystemAPI" (
+    customData = {
+        token apiSchemaType = "singleApply"
+    }
+)
+{
+    double units:kilogramsPerUnit = 1
+    double units:secondsPerUnit = 1
+    double units:amperesPerUnit = 1
+    double units:kelvinsPerUnit = 1
+    double units:molesPerUnit = 1
+    double units:candelasPerUnit = 1
+}
+
+# Example domain schema showing dimensions declared where the attribute is defined.
+# unitDimension is a registered metadata field, so usdGenSchema keeps it (it clears
+# property customData, which is why UsdPhysics' "Units:" doc strings are lost today).
+class "ThermalBodyAPI" (
+    customData = {
+        token apiSchemaType = "singleApply"
+    }
+)
+{
+    double thermal:initialTemperature = 293.15 (
+        unitDimension = {
+            int Theta = 1
+        }
+    )
+    double thermal:conductivity = 0 (
+        unitDimension = {
+            int L = 1
+            int M = 1
+            int T = -3
+            int Theta = -1
+        }
+    )
+    double thermal:specificHeat = 0 (
+        unitDimension = {
+            int L = 2
+            int T = -2
+            int Theta = -1
+        }
+    )
+}
