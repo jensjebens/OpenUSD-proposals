@@ -70,9 +70,9 @@ of:
 
 - **Ecosystem conventions** -- canonical units, conformance
   responsibilities.
-- **Infrastructure changes** -- how schemas declare the kind of quantity
-  that each attribute holds, and how prims declare the units of their
-  subtree.
+- **Infrastructure changes** -- how schemas could declare the physical
+  dimension of each attribute, and how prims could declare the units of
+  their subtree.
 - **Practical tooling** -- assembly-time correction, ingest validation,
   composed-space editing.
 
@@ -350,8 +350,9 @@ metadata field passes through the build unchanged.
 ### Pixar's spatial metrics proposal (PR #114)
 
 [OpenUSD-proposals PR #114](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/114)
-proposes `UsdSpatialMetricsAPI` as the successor to the `metersPerUnit`
-and `upAxis` layer metadata. Its main parts are:
+is an open proposal and is not yet part of OpenUSD. It proposes
+`UsdSpatialMetricsAPI` as the successor to the `metersPerUnit` and
+`upAxis` layer metadata. The main parts of the proposal are:
 
 - `spatial:metersPerUnit` and `spatial:upAxis` as attributes of an
   applied schema. A prim that has the schema applied is authoritative
@@ -365,14 +366,14 @@ and `upAxis` layer metadata. Its main parts are:
   referenced prims have the schema applied, that a mismatch with the
   parent is compensated, and that the compensation still matches.
 
-PR #114 considered computing the compensation at evaluation time with
-OpenExec and did not pursue it, for two stated reasons. A computed
+The authors of PR #114 considered computing the compensation at
+evaluation time with OpenExec and did not pursue that approach, for two
+stated reasons. A computed
 transform cannot correct attributes that are not transforms, such as
 gravity. Authored compensation also stays inspectable, can be
-validated, and works for clients that do not run OpenExec. Mass and the
-other non-spatial units are left as future work, planned as a separate
-`UsdPhysicsMetricsAPI`. At the time of writing, PR #114 is open and not
-implemented in OpenUSD.
+validated, and works for clients that do not run OpenExec. PR #114
+lists mass and the other non-spatial units as future work, for a
+separate `UsdPhysicsMetricsAPI`.
 
 ### Time remapping vs. spatial remapping
 
@@ -455,7 +456,7 @@ accompanies the
 - **Partly declared units.** A prim declares one unit, such as its up
   axis, and leaves the others undeclared. A design has to say whether
   the undeclared units come from a fallback value or from an ancestor.
-  In PR #114 they come from the schema's fallback value.
+  Under PR #114, they come from the fallback value of the schema.
 - **Values from other sources.** A steel density arrives from a vendor
   catalogue in g/cm³ for an asset authored in SI units, and a chip
   temperature arrives from a sensor in degrees Celsius.
@@ -716,8 +717,9 @@ and bring concrete experience, not preferences.
    schemas at scale has
    [non-trivial cost](https://forum.aousd.org/t/proposal-to-revise-use-of-layer-metadata-in-usd/1422).
    If you run authoring or validation workflows at scale, this
-   decision needs your data. PR #114 (`UsdSpatialMetricsAPI`) is the
-   current concrete form of the prim-level direction for spatial units.
+   decision needs your data. PR #114 (`UsdSpatialMetricsAPI`), which is
+   open and not yet part of OpenUSD, is the most concrete proposal so far
+   for prim-level spatial units.
 
 4. **Which attributes are unit-bearing, and what are their
    dimensional exponents?**
@@ -730,13 +732,13 @@ and bring concrete experience, not preferences.
    unit-bearing attributes, that knowledge is directly useful --
    bring it to the relevant WG.
 
-   Note that this concern is **orthogonal to MetricsAPI** (open
-   question 3). MetricsAPI answers "what unit system is this subtree
-   in?" -- the unit *context*. Dimensional exponents answer "how does
-   this attribute scale with that context?" -- the conversion *rule*.
-   Both are required to compute a correct conversion factor, but they
-   are independent: MetricsAPI applies at the prim level and is the
-   same for all attributes on a prim, while dimensional exponents are
+   This concern is independent of the proposed MetricsAPI (open
+   question 3). The proposed MetricsAPI would record which unit system
+   a subtree is in, which is the unit *context*. Dimensional exponents
+   record how an attribute scales with that context, which is the
+   conversion *rule*. A correct conversion factor needs both, but the
+   two are independent. The proposed MetricsAPI would apply at the prim
+   level and be the same for all attributes on a prim, while dimensional exponents are
    schema-level invariants (every `physics:density` is always
    M¹·L⁻³, regardless of which prim it appears on). As noted above,
    UsdPhysics already declares these exponents in doc strings -- the
@@ -772,7 +774,7 @@ and bring concrete experience, not preferences.
    and flag this case?
 
 7. **How do units behave across every composition arc?**
-   PR #114 covers references and payloads. Relocates, inherits and
+   PR #114 proposes rules for references and payloads. Relocates, inherits and
    specializes, variants, deactivation and instancing also need a
    written rule, and the rules should be written before new schemas
    build on them.
@@ -814,11 +816,11 @@ the infrastructure work described above.
 
 The companion proposal,
 [Units in OpenUSD: a common starting point](../units_common_ground/README.md),
-presents one design. It adopts PR #114 as written and adds composition
-rules for every arc, dimensions declared in schemas through a registered
-metadata field, one unit-system schema for the other six base units with
-a conversion utility in OpenUSD core, and a suggestion for values that
-arrive in another unit. A prototype runs the concrete cases above
+presents one design. It proposes to adopt PR #114 as written, and to
+add composition rules for every arc, dimensions declared in schemas
+through a new registered metadata field, one new unit-system schema for
+the other six base units, and a new conversion utility in OpenUSD core.
+It also suggests an approach for values from a source in another unit. A prototype runs the concrete cases above
 against that design.
 
 Nothing in this document endorses or precludes a specific design. The
@@ -878,14 +880,14 @@ This proposal connects to several related efforts in the OpenUSD
 ecosystem:
 
 - **[Spatial metrics (PR #114)](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/114)**
-  -- Pixar's proposal for `UsdSpatialMetricsAPI`, described under
-  [Existing mechanisms](#pixars-spatial-metrics-proposal-pr-114). It is
+  -- Pixar's open proposal for `UsdSpatialMetricsAPI`, described in
+  the [section on existing mechanisms](#pixars-spatial-metrics-proposal-pr-114). It is
   the most concrete design for spatial units so far.
 
 - **[Units in OpenUSD: a common starting point](../units_common_ground/README.md)**
   -- The companion proposal to this problem statement. It presents one
-  design that takes PR #114 as written and adds the requirements in
-  this problem statement that PR #114 leaves open, and it includes a prototype that runs the concrete cases
+  design that takes PR #114 as written and proposes additions that meet
+  the requirements in this problem statement that PR #114 leaves open, and it includes a prototype that runs the concrete cases
   in this problem statement. This document provides the motivation and
   requirements; the companion contains the technical design.
 
