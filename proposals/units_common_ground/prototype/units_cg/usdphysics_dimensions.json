@@ -1,0 +1,197 @@
+{
+  "PhysicsDistanceJoint.physics:maxDistance": {
+    "dimension": {
+      "L": 1
+    },
+    "source": "distance."
+  },
+  "PhysicsDistanceJoint.physics:minDistance": {
+    "dimension": {
+      "L": 1
+    },
+    "source": "distance."
+  },
+  "PhysicsDriveAPI.physics:damping": {
+    "angular": {
+      "L": 2,
+      "M": 1,
+      "T": -1,
+      "angle": -1
+    },
+    "linear": {
+      "M": 1,
+      "T": -1
+    },
+    "source": "if linear drive: mass/second If angular drive: mass*DIST_UNITS*DIST_UNITS/second/degrees."
+  },
+  "PhysicsDriveAPI.physics:maxForce": {
+    "angular": {
+      "L": 2,
+      "M": 1,
+      "T": -2
+    },
+    "linear": {
+      "L": 1,
+      "M": 1,
+      "T": -2
+    },
+    "source": "if linear drive: mass*DIST_UNITS/second/second if angular drive: mass*DIST_UNITS*DIST_UNITS/second/second inf means not limited. Must be non-negative."
+  },
+  "PhysicsDriveAPI.physics:stiffness": {
+    "angular": {
+      "L": 2,
+      "M": 1,
+      "T": -2,
+      "angle": -1
+    },
+    "linear": {
+      "M": 1,
+      "T": -2
+    },
+    "source": "if linear drive: mass/second/second if angular drive: mass*DIST_UNITS*DIST_UNITS/degrees/second/second."
+  },
+  "PhysicsDriveAPI.physics:targetPosition": {
+    "angular": {
+      "angle": 1
+    },
+    "linear": {
+      "L": 1
+    },
+    "source": "if linear drive: distance if angular drive: degrees."
+  },
+  "PhysicsDriveAPI.physics:targetVelocity": {
+    "angular": {
+      "T": -1,
+      "angle": 1
+    },
+    "linear": {
+      "L": 1,
+      "T": -1
+    },
+    "source": "if linear drive: distance/second if angular drive: degrees/second."
+  },
+  "PhysicsJoint.physics:breakForce": {
+    "dimension": {
+      "L": 1,
+      "M": 1,
+      "T": -2
+    },
+    "source": "mass * distance / second / second"
+  },
+  "PhysicsJoint.physics:breakTorque": {
+    "dimension": {
+      "L": 2,
+      "M": 1,
+      "T": -2
+    },
+    "source": "mass * distance * distance / second / second"
+  },
+  "PhysicsLimitAPI.physics:high": {
+    "angular": {
+      "angle": 1
+    },
+    "linear": {
+      "L": 1
+    },
+    "source": "degrees or distance depending on trans or rot axis applied to. inf means not limited in positive direction."
+  },
+  "PhysicsLimitAPI.physics:low": {
+    "angular": {
+      "angle": 1
+    },
+    "linear": {
+      "L": 1
+    },
+    "source": "degrees or distance depending on trans or rot axis applied to. -inf means not limited in negative direction."
+  },
+  "PhysicsMassAPI.physics:centerOfMass": {
+    "dimension": {
+      "L": 1
+    },
+    "source": "distance."
+  },
+  "PhysicsMassAPI.physics:density": {
+    "dimension": {
+      "L": -3,
+      "M": 1
+    },
+    "source": "mass/distance/distance/distance."
+  },
+  "PhysicsMassAPI.physics:diagonalInertia": {
+    "dimension": {
+      "L": 2,
+      "M": 1
+    },
+    "source": "mass*distance*distance."
+  },
+  "PhysicsMassAPI.physics:mass": {
+    "dimension": {
+      "M": 1
+    },
+    "source": "mass."
+  },
+  "PhysicsMaterialAPI.physics:density": {
+    "dimension": {
+      "L": -3,
+      "M": 1
+    },
+    "source": "mass/distance/distance/distance."
+  },
+  "PhysicsPrismaticJoint.physics:lowerLimit": {
+    "dimension": {
+      "L": 1
+    },
+    "source": "distance. -inf means not limited in negative direction."
+  },
+  "PhysicsPrismaticJoint.physics:upperLimit": {
+    "dimension": {
+      "L": 1
+    },
+    "source": "distance. inf means not limited in positive direction."
+  },
+  "PhysicsRevoluteJoint.physics:lowerLimit": {
+    "dimension": {
+      "angle": 1
+    },
+    "source": "degrees. -inf means not limited in negative direction."
+  },
+  "PhysicsRevoluteJoint.physics:upperLimit": {
+    "dimension": {
+      "angle": 1
+    },
+    "source": "degrees. inf means not limited in positive direction."
+  },
+  "PhysicsRigidBodyAPI.physics:angularVelocity": {
+    "dimension": {
+      "T": -1,
+      "angle": 1
+    },
+    "source": "degrees/second."
+  },
+  "PhysicsRigidBodyAPI.physics:velocity": {
+    "dimension": {
+      "L": 1,
+      "T": -1
+    },
+    "source": "distance/second."
+  },
+  "PhysicsScene.physics:gravityMagnitude": {
+    "dimension": {
+      "L": 1,
+      "T": -2
+    },
+    "source": "distance/second/second."
+  },
+  "PhysicsSphericalJoint.physics:coneAngle0Limit": {
+    "dimension": {
+      "angle": 1
+    },
+    "source": "degrees."
+  },
+  "PhysicsSphericalJoint.physics:coneAngle1Limit": {
+    "dimension": {
+      "angle": 1
+    },
+    "source": "degrees."
+  }
+}

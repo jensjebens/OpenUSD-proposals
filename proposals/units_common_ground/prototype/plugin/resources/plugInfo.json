@@ -1,0 +1,47 @@
+{
+    "Plugins": [
+        {
+            "Info": {
+                "SdfMetadata": {
+                    "unitDimension": {
+                        "appliesTo": ["attributes"],
+                        "type": "dictionary",
+                        "displayGroup": "Units",
+                        "documentation": "Exponents of the SI base dimensions (L, M, T, I, Theta, N, J) for this attribute's quantity. Declared by the schema that defines the attribute, or authored on a custom attribute."
+                    }
+                },
+                "Types": {
+                    "CgSpatialMetricsAPI": {
+                        "alias": {"UsdSchemaBase": "SpatialMetricsAPI"},
+                        "bases": ["UsdAPISchemaBase"],
+                        "apiSchemaType": "singleApply",
+                        "schemaKind": "singleApplyAPI"
+                    },
+                    "CgSpatialMetricsXformCompensationAPI": {
+                        "alias": {"UsdSchemaBase": "SpatialMetricsXformCompensationAPI"},
+                        "bases": ["UsdAPISchemaBase"],
+                        "apiSchemaType": "singleApply",
+                        "schemaKind": "singleApplyAPI"
+                    },
+                    "CgUnitSystemAPI": {
+                        "alias": {"UsdSchemaBase": "UnitSystemAPI"},
+                        "bases": ["UsdAPISchemaBase"],
+                        "apiSchemaType": "singleApply",
+                        "schemaKind": "singleApplyAPI"
+                    },
+                    "CgThermalBodyAPI": {
+                        "alias": {"UsdSchemaBase": "ThermalBodyAPI"},
+                        "bases": ["UsdAPISchemaBase"],
+                        "apiSchemaType": "singleApply",
+                        "schemaKind": "singleApplyAPI"
+                    }
+                }
+            },
+            "LibraryPath": "",
+            "Name": "unitsCommonGround",
+            "ResourcePath": "resources",
+            "Root": "..",
+            "Type": "resource"
+        }
+    ]
+}
