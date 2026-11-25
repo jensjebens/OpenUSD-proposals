@@ -39,10 +39,6 @@ PR 114 leaves the following requirements from the problem statement open. This d
 meets them:
 
 - The design declares all seven SI base units (principle 9).
-- This design adds one schema, shared by every domain, that declares the unit system.
-  Without a shared schema, a base unit
-  that several domains use, such as temperature, would be declared in the schema of one
-  domain and used from the others (point 6 under "Why this matters now").
 - The rules for units are written down for every composition arc before new schemas
   build on them (open question 7).
 - Each physics value can come from a different source, in the unit of that source,
