@@ -1,6 +1,6 @@
 # Units and Scale in Composed Scenes
 
-Copyright &copy; 2026, NVIDIA Corporation, version 0.1 (DRAFT)
+Copyright &copy; 2026, NVIDIA Corporation, version 0.2 (DRAFT)
 
 Jens Jebens
 
@@ -16,9 +16,11 @@ Jens Jebens
   - [Why this matters now](#why-this-matters-now)
 - [Existing mechanisms in USD](#existing-mechanisms-in-usd)
   - [Stage-level metrics metadata](#stage-level-metrics-metadata)
+  - [Pixar's spatial metrics proposal (PR #114)](#pixars-spatial-metrics-proposal-pr-114)
   - [Time remapping vs. spatial remapping](#time-remapping-vs-spatial-remapping)
   - [Metrics Assembler and Scene Optimizer](#metrics-assembler-and-scene-optimizer)
 - [Industry use cases](#industry-use-cases)
+  - [Concrete cases](#concrete-cases)
   - [Manufacturing and digital engineering](#manufacturing-and-digital-engineering)
   - [Architecture, Engineering, Construction, and Operations (AECO)](#architecture-engineering-construction-and-operations-aeco)
   - [Robotics and simulation](#robotics-and-simulation)
@@ -26,7 +28,8 @@ Jens Jebens
 - [Design considerations](#design-considerations)
   - [Principles](#principles)
   - [Open questions and tradeoffs](#open-questions-and-tradeoffs)
-  - [Recommended baseline](#recommended-baseline)
+  - [Practice until a design is agreed](#practice-until-a-design-is-agreed)
+  - [Companion design](#companion-design)
   - [Risks](#risks)
 - [Relationship to other proposals](#relationship-to-other-proposals)
 - [Next steps](#next-steps)
@@ -34,13 +37,6 @@ Jens Jebens
 - [Appendix B: AI-Assisted Drafting](#appendix-b-ai-assisted-drafting)
 
 ## Introduction
-
-Regularly, and with increasing impatience,
-someone asks why USD doesn't "just fix" units.
-Scenes break, assets come in at the wrong scale,
-simulations explode, and it feels like
-the tooling should have solved this by now.
-The frustration is legitimate.
 
 Many systems that aggregate spatial data --
 CAD tools, GIS platforms, game engines --
@@ -64,13 +60,19 @@ Neither can proceed without the other.
 
 **Expected outcome.** This proposal seeks community alignment on the
 structure of the units problem -- distinguishing concerns that are
-routinely conflated -- and on the design principles that should guide
-solutions. The likely result is a combination of:
+routinely conflated -- and on the requirements that any solution must
+meet. A companion proposal,
+[Units in OpenUSD: a common starting point](../units_common_ground/README.md),
+presents one design against these requirements. The two documents are
+meant to be read together, but this problem statement can be reviewed
+and agreed on without the companion. The likely result is a combination
+of:
 
 - **Ecosystem conventions** -- canonical units, conformance
   responsibilities.
-- **Infrastructure changes** -- unit-dimension annotations in schemas,
-  prim-level metrics, evaluation-time resolution.
+- **Infrastructure changes** -- how schemas could declare the physical
+  dimension of each attribute, and how prims could declare the units of
+  their subtree.
 - **Practical tooling** -- assembly-time correction, ingest validation,
   composed-space editing.
 
@@ -147,6 +149,12 @@ systems that made fundamentally different unit choices:
 - **Robotics simulators** (Isaac Sim, Gazebo) require precise metric
   consistency for physics simulation -- a 100x scale error in gravity
   or joint limits produces catastrophic simulation failure.
+- **Engineering simulation** (structural, thermal, fluid and
+  electromagnetic analysis) works with all seven SI base units,
+  including temperature and electric current. Material properties and
+  boundary conditions come from vendor catalogues, sensors and
+  engineering codes, each in its own unit, while the solver computes in
+  one consistent set of working units.
 
 When these assets are composed into a single USD stage, the authored
 numbers disagree. A factory floor assembling CAD-sourced parts
@@ -272,18 +280,25 @@ The urgency of the units problem has increased for several reasons:
    volumetric density), or stage-level physics constants (gravity
    magnitude). Uncovered domains produce silently wrong results.
 
-5. **The MetricsAPI direction is accepted but unimplemented.** The
-   Pixar proposal
+5. **Prim-level units are proposed but not implemented.** The Pixar
+   proposal
    ([PR #45](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/45))
    to move unit declarations from layer metadata to prim-level
    applied schemas was accepted into the proposals repository in
-   April 2024. OpenUSD still exposes only the stage-level
-   `metersPerUnit` and `upAxis` API in `UsdGeom` — `UsdGeomMetricsAPI`
-   and `UsdPhysicsMetricsAPI` do not exist in the codebase. Implementing
-   them is the nearest-term infrastructure change, and it needs
-   practitioner input to resolve open questions around performance,
-   scope, and composition semantics that only implementation will
-   settle.
+   April 2024. Pixar's follow-up proposal,
+   [PR #114](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/114)
+   (`UsdSpatialMetricsAPI`, September 2026), specifies the spatial part:
+   meters per unit and up axis on prims, named compensation transforms,
+   and validators. It leaves mass and the other units as future work.
+   Neither proposal is in OpenUSD yet, which still exposes only the
+   stage-level `metersPerUnit` and `upAxis` API in `UsdGeom`.
+
+6. **Engineering simulation uses more than length and mass.**
+   Simulation workflows also use time, temperature, electric current
+   and the other SI base units. They raise questions that any units
+   design has to answer: how a unit system is declared for each base
+   unit, how units behave across every composition arc, and how
+   precisely values convert at very large and very small scales.
 
 ## Existing mechanisms in USD
 
@@ -321,14 +336,46 @@ attributes -- but only as human-readable doc strings, not as
 machine-readable metadata. The schema consistently uses a `Units:`
 convention: `Units: mass/distance/distance/distance` for density,
 `Units: distance/second/second` for gravity, `Units: distance/second`
-for velocity, `Units: mass*distance*distance` for inertia. This
+for velocity, `Units: mass*distance*distance` for inertia. In UsdPhysics, 25
+attributes state their units this way; `physics:localPos0` and
+`physics:localPos1` are lengths and state none. This
 information is precise, correct, and already maintained by the Physics
 Working Group -- but it is trapped in prose. No tool can consume it
 programmatically without string parsing. The intellectual work of
-determining dimensional exponents has been done; the gap is purely one
-of encoding: the same information expressed as structured metadata
-(e.g., `customData` on attribute definitions) would be directly
-consumable by conversion tools and validators.
+determining dimensional exponents has been done; the gap is one of
+encoding. Any encoding also has to survive the schema build:
+usdGenSchema (OpenUSD 26.8) drops `customData` on attribute definitions
+and keeps only the first sentence of each doc string, so the `Units:`
+clauses do not reach a built `generatedSchema.usda`. A registered
+metadata field passes through the build unchanged.
+
+### Pixar's spatial metrics proposal (PR #114)
+
+[OpenUSD-proposals PR #114](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/114)
+is an open proposal and is not yet part of OpenUSD. It proposes
+`UsdSpatialMetricsAPI` as the successor to the `metersPerUnit` and
+`upAxis` layer metadata. The main parts of the proposal are:
+
+- `spatial:metersPerUnit` and `spatial:upAxis` as attributes of an
+  applied schema. A prim that has the schema applied is authoritative
+  for itself and its descendants until a descendant applies the schema.
+- `UsdGeomSpatialMetricsXformCompensationAPI`, with which a tool authors
+  named transform ops (`xformOp:scale:metricsCompensation`,
+  `xformOp:rotateX:metricsCompensation`) on a referencing prim to
+  reconcile its units with its parent's. A flag marks a mismatch that
+  is deliberate.
+- Validators that check, among other things, that root prims and
+  referenced prims have the schema applied, that a mismatch with the
+  parent is compensated, and that the compensation still matches.
+
+The authors of PR #114 considered computing the compensation at
+evaluation time with OpenExec and did not pursue that approach, for two
+stated reasons. A computed
+transform cannot correct attributes that are not transforms, such as
+gravity. Authored compensation also stays inspectable, can be
+validated, and works for clients that do not run OpenExec. PR #114
+lists mass and the other non-spatial units as future work, for a
+separate `UsdPhysicsMetricsAPI`.
 
 ### Time remapping vs. spatial remapping
 
@@ -391,6 +438,36 @@ across implementations.
 The following examples illustrate the problem across industries. They
 are not exhaustive but are intended to show that the need for unit
 handling in composed scenes is broad and cross-cutting.
+
+### Concrete cases
+
+Each case below describes one situation that a units design has to
+handle. Together they serve as tests for any candidate design. A prototype that exercises all of them on OpenUSD 26.8
+accompanies the
+[common-starting-point companion proposal](../units_common_ground/README.md).
+
+- **Spatial mismatch at a reference.** A bolt authored in millimetres
+  with Z up is referenced into a factory authored in metres with Y up.
+  The bolt's points are read as metres unless something reconciles the
+  two.
+- **Relocation.** A gripper authored under a tool prim in millimetres is
+  relocated under a work cell in metres. A design has to say whether the
+  gripper keeps its source units or takes its new parent's.
+- **Inherited units.** A class prim with declared units applies them to
+  every prim that inherits from it, including prims in other layers.
+- **Partly declared units.** A prim declares one unit, such as its up
+  axis, and leaves the others undeclared. A design has to say whether
+  the undeclared units come from a fallback value or from an ancestor.
+  Under PR #114, they come from the fallback value of the schema.
+- **Values from other sources.** A steel density arrives from a vendor
+  catalogue in g/cm³ for an asset authored in SI units, and a chip
+  temperature arrives from a sensor in degrees Celsius.
+- **Quantities whose dimension depends on use.** The stiffness of a
+  UsdPhysics drive has one dimension on a linear joint and another on an
+  angular joint.
+- **Precision across scales.** A ball grid array package authored in
+  micrometres sits 0.2 m from the origin of a circuit board authored in
+  metres.
 
 ### Manufacturing and digital engineering
 
@@ -503,7 +580,9 @@ that consensus.
 2. **Non-destructive by default.** Solutions should preserve authored
    values wherever possible. Baking conversions into source data is
    acceptable as an explicit pipeline step, but should not be the only
-   option. The correction mechanism should be auditable and reversible.
+   option. The correction mechanism should be auditable and reversible,
+   and a validator should be able to report where units are wrong and
+   why.
 
 3. **Completeness over transforms.** Transform correction alone is
    insufficient. Any mechanism must be extensible to cover all
@@ -534,11 +613,33 @@ that consensus.
 6. **Ecosystem agreement first.** The most impactful intervention
    requires no software changes: agreeing on canonical unit
    conventions -- possibly per Industry Vertical. Conformant content
-   eliminates the units problem entirely.
+   removes most of the units problem, though values that arrive from
+   other sources still need handling.
    Non-conformant content is explicitly identified and
    handled by whichever correction mechanism the pipeline employs.
    Software infrastructure should support and enforce the conventions
    the ecosystem agrees upon, not substitute for the agreement itself.
+
+7. **No unitless attribute.** Every attribute that holds a quantity has
+   a unit that a tool can determine. An attribute that is truly
+   dimensionless declares that explicitly.
+
+8. **One clear method to determine units.** For any attribute on a
+   composed stage, one documented method determines its unit, across
+   every composition arc. Two tools that follow the method get the same
+   answer, so every authored value has exactly one interpretation.
+
+9. **All seven SI base units (proposed).** The design covers length,
+   mass, time, electric current, temperature, amount of substance and
+   luminous intensity, so that no domain has to invent its own unit
+   declaration. This principle is proposed for discussion and has not
+   been agreed.
+
+10. **Precision is scoped per workflow (proposed).** Each workflow
+    states the precision it needs. Where a single prim cannot reach that
+    precision, assets are split into more prims, as with any other
+    geometry, before the format itself is changed. This principle is
+    proposed for discussion and has not been agreed.
 
 ### Open questions and tradeoffs
 
@@ -621,7 +722,9 @@ and bring concrete experience, not preferences.
    schemas at scale has
    [non-trivial cost](https://forum.aousd.org/t/proposal-to-revise-use-of-layer-metadata-in-usd/1422).
    If you run authoring or validation workflows at scale, this
-   decision needs your data.
+   decision needs your data. PR #114 (`UsdSpatialMetricsAPI`), which is
+   open and not yet part of OpenUSD, is the most concrete proposal so far
+   for prim-level spatial units.
 
 4. **Which attributes are unit-bearing, and what are their
    dimensional exponents?**
@@ -634,29 +737,35 @@ and bring concrete experience, not preferences.
    unit-bearing attributes, that knowledge is directly useful --
    bring it to the relevant WG.
 
-   Note that this concern is **orthogonal to MetricsAPI** (open
-   question 3). MetricsAPI answers "what unit system is this subtree
-   in?" -- the unit *context*. Dimensional exponents answer "how does
-   this attribute scale with that context?" -- the conversion *rule*.
-   Both are required to compute a correct conversion factor, but they
-   are independent: MetricsAPI applies at the prim level and is the
-   same for all attributes on a prim, while dimensional exponents are
+   This concern is independent of the proposed MetricsAPI (open
+   question 3). The proposed MetricsAPI would record which unit system
+   a subtree is in, which is the unit *context*. Dimensional exponents
+   record how an attribute scales with that context, which is the
+   conversion *rule*. A correct conversion factor needs both, but the
+   two are independent. The proposed MetricsAPI would apply at the prim
+   level and be the same for all attributes on a prim, while dimensional exponents are
    schema-level invariants (every `physics:density` is always
    M¹·L⁻³, regardless of which prim it appears on). As noted above,
    UsdPhysics already declares these exponents in doc strings -- the
    path forward is to formalize them as structured schema metadata,
-   not to conflate them with prim-level unit declarations.
+   not to conflate them with prim-level unit declarations. For
+   multiple-apply schemas such as `PhysicsDriveAPI` and
+   `PhysicsLimitAPI`, the dimension of an attribute depends on whether
+   the instance is linear or angular, so one declaration per attribute
+   is not enough.
 
-5. **How should unit-aware value resolution work?**
-   A computational layer that resolves units during value evaluation
-   (rather than requiring every consumer to re-implement conversion)
-   is the long-term infrastructure goal. OpenExec (shipping with
-   OpenUSD since v25.08) provides the execution framework for this:
-   schema computations with automatic caching, invalidation, and
-   multi-threaded evaluation. The community needs to scope this: is it
-   feasible, what does it cost, and what subset of the problem does
-   it actually cover? Default behavior must remain numeric-preserving
-   for backward compatibility; unit-aware resolution is opt-in only.
+5. **Where does the conversion maths live?**
+   Consumers such as solvers need values in their own working units.
+   Three options are on the table. Opt-in evaluation-time resolution
+   through OpenExec (shipping with OpenUSD since v25.08) would provide
+   caching and invalidation, but PR #114 considered OpenExec for spatial
+   compensation and did not pursue it. A conversion utility in OpenUSD
+   core would compute a factor on request, in the way
+   `ComputeLocalToWorldTransform` computes a matrix. Leaving conversion
+   to each consumer needs no new code in OpenUSD, but then precision and
+   results cannot be checked across tools. Whichever option is chosen,
+   default behavior must remain numeric-preserving for backward
+   compatibility.
 
 6. **How should sublayer composition interact with units?**
    References and payloads provide natural boundaries where corrective
@@ -669,10 +778,30 @@ and bring concrete experience, not preferences.
    automatic unit handling? Or is infrastructure needed to detect
    and flag this case?
 
-### Recommended baseline
+7. **How do units behave across every composition arc?**
+   PR #114 proposes rules for references and payloads. Relocates, inherits and
+   specializes, variants, deactivation and instancing also need a
+   written rule, and the rules should be written before new schemas
+   build on them.
 
-Until the long-term infrastructure exists (unit-dimension annotations,
-evaluation-time resolution), the recommended default stack is:
+8. **Should an attribute be able to carry its own unit?**
+   Some engineering simulation tools give each physics property its
+   own unit, because each value comes from a different source. A
+   unit on an attribute that overrides the unit system of its subtree
+   gives one authored value two possible readings, which conflicts with
+   principle 8. The alternative is to convert such values once, when the
+   attribute is written, and to record the source.
+
+9. **What precision do workflows need?**
+   CAD kernels commonly quote linear tolerances that need about eleven
+   significant digits, while `point3f` holds about seven, counted from
+   each prim's own origin. Answering this needs the tolerances of real
+   workflows, which decide whether splitting assets into prims is enough
+   or whether some data needs double precision.
+
+### Practice until a design is agreed
+
+Until a design is agreed and implemented, the recommended practice is:
 
 1. **Standardize at the source.** Define canonical units for your
    pipeline and enforce them through validation.
@@ -688,13 +817,28 @@ extreme scales. But it is implementable today with existing tools,
 and it reduces the problem surface to the cases that genuinely require
 the infrastructure work described above.
 
+### Companion design
+
+The companion proposal,
+[Units in OpenUSD: a common starting point](../units_common_ground/README.md),
+presents one design. It proposes to adopt PR #114 as written, and to
+add composition rules for every arc, dimensions declared in schemas
+through a new registered metadata field, one new unit-system schema for
+the other six base units, and a new conversion utility in OpenUSD core.
+It also suggests an approach for values from a source in another unit. A prototype runs the concrete cases above
+against that design.
+
+Nothing in this document endorses or precludes a specific design. The
+goal is to establish requirements against which any proposed design can
+be evaluated, including PR #114 on its own.
+
 ### Risks
 
 1. **Paralysis by analysis.** The units problem has been discussed for
    years without resolution. The risk is that the community continues
    to debate the perfect long-term architecture while practitioners
    work around the problem with ad-hoc solutions that fragment the
-   ecosystem further. The recommended baseline provides a
+   ecosystem further. The practice described above provides a
    pragmatic path forward that does not require waiting for
    infrastructure changes.
 
@@ -740,14 +884,22 @@ the infrastructure work described above.
 This proposal connects to several related efforts in the OpenUSD
 ecosystem:
 
-- **[Unit-Aware Resolution in USD: Implementation Exploration](../units_resolution/README.md)**
-  -- The companion document to this problem statement. It collects the
-  implementation evidence behind the design directions discussed here:
-  a proof-of-concept consumer API, prim-level metrics schemas with a
-  dimensional exponent registry, and evaluation-time unit resolution
-  through OpenExec and Hydra, with measured overhead. Kept separate so
-  that the problem statement can be reviewed and agreed on without
-  reference to any particular implementation.
+- **[Spatial metrics (PR #114)](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/114)**
+  -- Pixar's open proposal for `UsdSpatialMetricsAPI`, described in
+  the [section on existing mechanisms](#pixars-spatial-metrics-proposal-pr-114). It is
+  the most concrete design for spatial units so far.
+
+- **[Units in OpenUSD: a common starting point](../units_common_ground/README.md)**
+  -- The companion proposal to this problem statement. It presents one
+  design that takes PR #114 as written and proposes additions that meet
+  the requirements in this problem statement that PR #114 leaves open, and it includes a prototype that runs the concrete cases
+  in this problem statement. This document provides the motivation and
+  requirements; the companion contains the technical design.
+
+- **[Boundary Representation Geometry in OpenUSD -- Problem Statement](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/108)**
+  (PR #108) -- A precedent for this structure: a problem statement that
+  establishes requirements, with the technical design in a companion
+  proposal.
 
 - **[Revise Use of Layer Metadata](../revise_use_of_layer_metadata/README.md)**
   ([PR #45](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/45))
@@ -761,7 +913,7 @@ ecosystem:
   per subtree, unlike layer-level metadata -- is foundational to
   composable unit handling.
 
-- **[Separation of Concerns for Identifiers](../identifier_separation_of_concerns/README.md)**
+- **[Separation of Concerns for Identifiers](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/105)**
   -- Addresses a parallel problem: the distinction between USD
   namespace identifiers and external source identifiers. Both
   proposals share the theme of separating internal USD mechanisms
@@ -797,30 +949,21 @@ ecosystem:
 
 ## Next steps
 
-1. **Submit as pull request.** Submit this proposal to the
-   [OpenUSD-proposals](https://github.com/PixarAnimationStudios/OpenUSD-proposals)
-   repository. Community feedback and discussion on the open questions
-   is welcome there.
+1. **Review this problem statement.** Gather feedback from the broader
+   OpenUSD community on the framing, the concrete cases, the principles
+   and the open questions.
 
-2. **Align on canonical conventions.** The most impactful near-term
-   action requires no software changes. The IEDT Interest Group's
-   charter explicitly includes "units and parameters requirements"
-   with routing to the Core Specification Working Group -- this is an
-   existing chartered mechanism for exactly this work. Convention
+2. **Evaluate the companion design against these requirements.** Once
+   the problem statement is accepted, review the
+   [companion proposal](../units_common_ground/README.md) through the
+   [principles](#principles), the
+   [open questions](#open-questions-and-tradeoffs) and the
+   [concrete cases](#concrete-cases).
+
+3. **Align on canonical conventions.** The most impactful near-term
+   action requires no software changes. The IEDT and AECO Interest
+   Groups represent the constituencies most affected, and convention
    agreement unblocks every subsequent infrastructure decision.
-
-3. **Drive MetricsAPI implementation forward.** The Pixar proposal
-   ([PR #45](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/45))
-   was accepted in April 2024, but the schemas it defines are still
-   absent from OpenUSD. Implementing them is the nearest-term
-   infrastructure change. It needs review from
-   practitioners who will consume the resulting schemas -- especially
-   those with authoring workflows that validate units during stage
-   construction. Where competing approaches exist (prim-level vs.
-   layer-level encoding, dictionary vs. schema), both should be
-   implemented on representative workloads and measured before
-   committing -- performance data from production-scale workflows
-   resolves debates that opinions cannot.
 
 4. **Conduct the attribute audit.** A systematic inventory of
    unit-bearing attributes across UsdGeom, UsdPhysics, UsdLux,
@@ -828,19 +971,13 @@ ecosystem:
    scope for any conversion mechanism. The Geometry, Physics, and
    Materials Working Groups are the right venues for this work.
    UsdPhysics provides a head start: its schema already declares
-   unit dimensions for every physics attribute via a consistent
-   `Units:` doc-string convention. Formalizing these as structured,
-   machine-readable metadata (rather than prose) is a concrete,
-   low-risk first step that the Physics WG could undertake
-   independently. The same approach should then be extended to
-   UsdGeom, UsdLux, and UsdShade.
+   unit dimensions for its physics attributes via a consistent
+   `Units:` doc-string convention.
 
-5. **Prototype evaluation-time resolution.** Based on alignment from
-   steps 2--4, prototype an opt-in unit-aware value resolution API on
-   a representative set of attributes, with measured performance
-   overhead. This is a multi-year effort that benefits from early
-   scoping. A first exploration exists in the
-   [companion implementation document](../units_resolution/README.md).
+5. **Submit as pull requests.** Submit this problem statement to the
+   [OpenUSD-proposals](https://github.com/PixarAnimationStudios/OpenUSD-proposals)
+   repository, with the companion proposal opened against its branch as
+   a stacked pull request.
 
 Stakeholders who want to accelerate this work are encouraged to engage
 directly on any of the steps above. The pace is determined by the
@@ -965,7 +1102,7 @@ stakeholder engagement that preceded the drafting process:
    unit-aware value resolution.
 
 8. **Existing proposals in this repository** -- The
-   [Separation of Concerns for Identifiers](../identifier_separation_of_concerns/README.md)
+   [Separation of Concerns for Identifiers](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/105)
    proposal was used as the primary structural reference.
    [Revise Use of Layer Metadata](../revise_use_of_layer_metadata/README.md)
    ([PR #45](https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/45))
@@ -998,3 +1135,10 @@ decisions included:
 
 A prompt-level drafting log for the problem space documents has been
 archived separately.
+
+### Version 0.2
+
+Version 0.2 was revised with Claude (Anthropic) in Claude Code, under
+the direction of Jens Jebens. It adds requirements from engineering
+simulation, describes Pixar's PR #114, adds the concrete cases and a section on the companion design, and
+pairs this problem statement with one companion design proposal.
