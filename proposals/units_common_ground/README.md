@@ -217,7 +217,7 @@ to every attribute that declares a dimension. The utility also converts values s
 break force and drive stiffness. PR 114 leaves these values open, because OpenUSD core
 has no computation that uses break force or drive stiffness.
 
-### Step 5: values whose source uses another unit (this draft's suggestion)
+### Step 5: values from a source in another unit (suggestion)
 
 Some values come from a source in a different unit from the asset, for example a vendor
 catalogue, a sensor or an engineering standard. Under step 5, the converter that
@@ -329,7 +329,7 @@ asks whether some workflows need finer splitting than they use today.
 2. How should a multiple-apply schema declare dimensions that depend on the instance?
    The options are per-instance metadata, separate schemas for linear and angular
    instances, or a naming rule like the one in the prototype.
-3. Should values whose source uses another unit be converted and recorded as in step 5,
+3. Should values from a source in another unit be converted and recorded as in step 5,
    or should each attribute be able to declare its own unit? If step 5 is adopted,
    should `unitSource` records be standardised, or left to each pipeline?
 4. Are double-precision factors exact enough, and which conversions must be exact?
